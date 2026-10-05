@@ -1,0 +1,43 @@
+# secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+secrets/
+credentials*
+
+# data (never commit; raw is read-only source of truth)
+data/raw/*
+data/interim/*
+data/processed/*
+!data/*/.gitkeep
+*.nc
+*.nc4
+*.grib
+*.grib2
+*.hdf
+*.h5
+*.tif
+*.tiff
+
+# generated artifacts (models, metrics, figures, reports)
+artifacts/*
+!artifacts/.gitkeep
+
+# python / notebooks
+.venv/
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.pytest_cache/
+
+# logs / OS / IDE
+*.log
+logs/
+.DS_Store
+Thumbs.db
+.idea/
