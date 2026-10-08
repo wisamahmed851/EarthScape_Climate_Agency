@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Error {{ status }}{% endblock %}
+{% block content %}
+<div class="es-card text-center">
+  <h1 class="es-page-title h3">{{ status }}</h1>
+  <p class="mb-3">{{ message }}</p>
+  <a class="btn btn-primary" href="/overview">Back to overview</a>
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Feedback Review{% endblock %}
+{% block content %}
+<h1 class="es-page-title h3 mb-3">Feedback review</h1>
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto"><select class="form-select" name="status" aria-label="Status filter"><option value="">All</option>
+    {% for s in statuses %}<option {{ 'selected' if s == status else '' }}>{{ s }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><button class="btn btn-primary" type="submit">Filter</button></div>
+</form>
+{% for f in items %}
+<div class="es-card mb-2">
+  <div class="d-flex justify-content-between flex-wrap gap-2">
+    <div><strong>{{ f.subject }}</strong> <span class="badge text-bg-light">{{ f.category }}</span>
+      <span class="badge {{ 'badge-status-off' if f.status == 'new' else 'badge-status-ok' }}">{{ f.status }}</span></div>
+    <div class="small text-muted">{{ f.username }} - {{ f.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</div>
+  </div>
+  <p class="my-2 es-message">{{ f.message }}</p>
+  <form method="post" action="/admin/feedback/{{ f._id }}/status" class="d-inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <input type="hidden" name="status" value="{{ 'reviewed' if f.status == 'new' else 'new' }}">
+    <button class="btn btn-sm btn-outline-primary" type="submit">Mark as {{ 'reviewed' if f.status == 'new' else 'new' }}</button>
+  </form>
+</div>
+{% else %}<p class="text-muted">No feedback yet.</p>{% endfor %}
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Forecast{% endblock %}
+{% block content %}
+<h1 class="es-page-title h3 mb-3">Monthly forecast (model-derived)</h1>
+{% if not run %}
+<div class="alert alert-warning">No analytics run exists yet. An Administrator must train the analytics (Trends &amp; Extremes page).</div>
+{% else %}
+<form method="get" class="row g-2 align-items-end mb-3">
+  <div class="col-auto"><label class="form-label" for="city">City</label>
+    <select class="form-select" id="city" name="city">{% for c in cities %}<option value="{{ c }}" {{ 'selected' if c == city else '' }}>{{ names[c] }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><label class="form-label" for="variable">Variable</label>
+    <select class="form-select" id="variable" name="variable">{% for v in ['temperature', 'humidity', 'precipitation', 'wind'] %}<option {{ 'selected' if v == variable else '' }}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><button class="btn btn-primary" type="submit">Show</button></div>
+</form>
+<div class="es-source-banner mb-3"><strong>Predictions are not observations.</strong> The next 12 months are forecast from a model trained on NASA POWER reanalysis-derived monthly values (model version {{ run.model_version }}, trained {{ run.created_at.strftime('%Y-%m-%d %H:%M') }} UTC, seed {{ run.seed }}). The band is approximate (&plusmn;1.96 &times; test RMSE) and is not a calibrated interval.</div>
+{% if fc.skipped %}<div class="alert alert-warning">{{ fc.skipped }}</div>{% else %}
+<script id="payload" data-kind="forecast" type="application/json">{{ fc|tojson }}</script>
+<div class="es-card mb-3"><div class="chart-box"><canvas id="c-forecast"></canvas></div></div>
+<div class="es-card"><h2>Evaluation on held-out test months ({{ fc.split.test }}; trained on {{ fc.split.train }})</h2>
+  <div class="table-responsive"><table class="table table-sm mb-2">
+    <thead><tr><th>Model</th><th>Validation MAE ({{ fc.split.validation_inside_train }})</th><th>Test MAE ({{ fc.unit }})</th><th>Test RMSE</th><th>Test R&sup2;</th><th></th></tr></thead>
+    <tbody>{% for name, m in fc.test_metrics.items() %}<tr><td>{{ name }}</td><td>{{ fc.validation_mae[name] }}</td><td>{{ m.mae }}</td><td>{{ m.rmse }}</td><td>{{ m.r2 }}</td>
+      <td>{% if name == fc.selected_model %}<span class="badge bg-success">selected</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+  <p class="small text-muted mb-0">The forward model was chosen on the validation block inside the training years ({{ fc.selected_on }}), then refitted on all 2001-2025 months. Baselines: <em>seasonal_climatology</em> (mean of each calendar month in training), <em>last_year_repeat</em> (last training year repeated), improved: <em>harmonic_trend_ridge</em> (3 seasonal harmonics + linear trend, Ridge alpha = 1). A high R&sup2; for temperature mostly reflects the seasonal cycle; compare with the baseline errors, not the R&sup2; alone. Skill for precipitation is limited and should not be over-interpreted.</p>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
+{% block scripts %}{% if run and not fc.skipped %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script><script src="/static/charts.js"></script>{% endif %}{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<div class="es-login">
+  <div class="text-center mb-3"><img class="es-login-logo" src="/static/logo.png" alt="EarthScape Climate Agency" width="258" height="161"></div>
+  <p class="text-center es-tagline">Big Data Analytics for Climate Monitoring</p>
+  <div class="es-card">
+    <h2>Sign in</h2>
+    {% if error %}<div class="alert alert-danger py-2" role="alert">{{ error }}</div>{% endif %}
+    <form method="post" action="/login" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <div class="mb-3"><label class="form-label" for="username">Username</label>
+        <input class="form-control" id="username" name="username" maxlength="64" required autofocus></div>
+      <div class="mb-3"><label class="form-label" for="password">Password</label>
+        <input class="form-control" id="password" name="password" type="password" maxlength="256" required></div>
+      <button class="btn btn-primary w-100" type="submit">Sign in</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

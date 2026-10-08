@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}City Comparison{% endblock %}
+{% block content %}
+<h1 class="es-page-title h3 mb-3">City Comparison</h1>
+{% if not ready %}
+<div class="alert alert-warning">{{ store.error }}</div>
+{% else %}
+<form method="get" class="row g-2 align-items-end mb-3">
+  <div class="col-auto"><label class="form-label" for="start_year">From year</label><input class="form-control" type="number" id="start_year" name="start_year" min="2001" max="2025" value="{{ start_year }}"></div>
+  <div class="col-auto"><label class="form-label" for="end_year">To year</label><input class="form-control" type="number" id="end_year" name="end_year" min="2001" max="2025" value="{{ end_year }}"></div>
+  <div class="col-auto"><button class="btn btn-primary" type="submit">Apply</button></div>
+</form>
+<div class="es-source-banner mb-3">{{ power_label }} Each city is one grid-cell point, so differences reflect location and grid resolution as well as climate.</div>
+<div class="es-card mb-3"><h2>Mean of annual values, {{ start_year }}-{{ end_year }}</h2>
+  <div class="table-responsive"><table class="table table-sm mb-0">
+    <thead><tr><th>City</th><th>Temperature (&deg;C)</th><th>Relative humidity (%)</th><th>Wind at 2 m (m/s)</th><th>Precipitation (mm/year)</th></tr></thead>
+    <tbody>{% for r in rows %}<tr><td>{{ r.name }}</td><td>{{ r.temp }}</td><td>{{ r.hum }}</td><td>{{ r.wind }}</td><td>{{ r.rain if r.rain is not none else 'n/a' }}</td></tr>{% endfor %}</tbody>
+  </table></div></div>
+<div id="chart-error" class="alert alert-danger d-none"></div>
+<div id="chart-root" data-kind="compare" data-api="/api/compare?start_year={{ start_year }}&amp;end_year={{ end_year }}"></div>
+<div class="row g-3">
+  <div class="col-lg-6"><div class="es-card"><h2>Temperature</h2><div class="chart-box"><canvas id="c-temp"></canvas></div></div></div>
+  <div class="col-lg-6"><div class="es-card"><h2>Precipitation</h2><div class="chart-box"><canvas id="c-rain"></canvas></div></div></div>
+  <div class="col-lg-6"><div class="es-card"><h2>Relative humidity</h2><div class="chart-box"><canvas id="c-hum"></canvas></div></div></div>
+  <div class="col-lg-6"><div class="es-card"><h2>Wind speed</h2><div class="chart-box"><canvas id="c-wind"></canvas></div></div></div>
+</div>
+<p class="small text-muted mt-2">Annual means weight monthly means by observed hours. Annual precipitation is shown only for years where all 12 monthly totals exist.</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% if ready %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script><script src="/static/charts.js"></script>{% endif %}{% endblock %}

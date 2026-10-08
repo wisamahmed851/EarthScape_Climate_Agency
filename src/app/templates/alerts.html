@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Alerts{% endblock %}
+{% block content %}
+<h1 class="es-page-title h3 mb-3">Alert thresholds</h1>
+<div class="alert alert-info">Rules on <strong>live variables</strong> (Open-Meteo modelled, OpenAQ observed) are evaluated after every poll against the newest non-stale readings; matches appear under <a href="/alerts/history">Alert History</a> and in the navigation badge. Rules on <strong>historical POWER variables</strong> are stored only and are <strong>never evaluated</strong>. Email and SMS delivery are <strong>not configured</strong>.</div>
+{% macro rule_fields(r) %}
+  <div class="col-md-4"><label class="form-label">Name</label><input class="form-control" name="name" maxlength="80" required value="{{ r.name if r else '' }}"></div>
+  <div class="col-md-2"><label class="form-label">City</label><select class="form-select" name="city_id">
+    <option value="all" {{ 'selected' if r and r.city_id == 'all' else '' }}>All cities</option>
+    {% for c in cities %}<option value="{{ c }}" {{ 'selected' if r and r.city_id == c else '' }}>{{ names[c] }}</option>{% endfor %}</select></div>
+  <div class="col-md-3"><label class="form-label">Variable</label><select class="form-select" name="variable">
+    {% for k, v in variables.items() %}<option value="{{ k }}" {{ 'selected' if r and r.variable == k else '' }}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="col-md-1"><label class="form-label">When</label><select class="form-select" name="operator">
+    {% for o in operators %}<option {{ 'selected' if r and r.operator == o else '' }}>{{ o }}</option>{% endfor %}</select></div>
+  <div class="col-md-2"><label class="form-label">Threshold</label><input class="form-control" name="threshold" inputmode="decimal" required value="{{ r.threshold if r else '' }}"></div>
+  <div class="col-md-2"><label class="form-label">Severity</label><select class="form-select" name="severity">
+    {% for s in severities %}<option {{ 'selected' if (r and r.severity == s) or (not r and s == 'warning') else '' }}>{{ s }}</option>{% endfor %}</select></div>
+{% endmacro %}
+<div class="es-card mb-3"><h2>{{ 'Edit rule' if editing else 'New rule' }}</h2>
+  <form method="post" action="{{ '/alerts/' ~ editing._id ~ '/edit' if editing else '/alerts' }}" class="row g-2 align-items-end">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    {{ rule_fields(editing) }}
+    <div class="col-auto"><button class="btn btn-primary" type="submit">Save rule</button>{% if editing %} <a class="btn btn-outline-secondary" href="/alerts">Cancel</a>{% endif %}</div>
+  </form></div>
+<div class="es-card"><h2>Rules</h2>
+  {% if rules %}<div class="table-responsive"><table class="table table-sm mb-0">
+    <thead><tr><th>Name</th><th>City</th><th>Condition</th><th>Severity</th><th>State</th><th>Evaluation</th><th>Created by</th><th></th></tr></thead>
+    <tbody>{% for r in rules %}<tr>
+      <td>{{ r.name }}</td><td>{{ 'All' if r.city_id == 'all' else names[r.city_id] }}</td>
+      <td>{{ variables[r.variable] }} {{ r.operator }} {{ r.threshold }}</td><td>{{ r.severity }}</td>
+      <td><span class="badge {{ 'badge-status-ok' if r.enabled else 'badge-status-off' }}">{{ 'Enabled' if r.enabled else 'Disabled' }}</span></td>
+      <td>{{ 'Live' if r.variable in live_vars else 'Not evaluated (historical variable)' }}</td>
+      <td>{{ r.created_by }}</td>
+      <td class="text-end text-nowrap"><a class="btn btn-sm btn-outline-primary" href="/alerts?edit={{ r._id }}">Edit</a>
+        <form method="post" action="/alerts/{{ r._id }}/toggle" class="d-inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="enabled" value="{{ '0' if r.enabled else '1' }}">
+          <button class="btn btn-sm btn-outline-secondary" type="submit">{{ 'Disable' if r.enabled else 'Enable' }}</button></form></td>
+    </tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="mb-0 text-muted">No rules yet.</p>{% endif %}</div>
+{% endblock %}

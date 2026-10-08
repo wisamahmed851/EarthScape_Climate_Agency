@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Alert History{% endblock %}
+{% block content %}
+<h1 class="es-page-title h3 mb-3">Alert history</h1>
+<div class="alert alert-info">Alerts are raised by the evaluator from stored current readings (Open-Meteo modelled, OpenAQ observed). They appear here and in the navigation badge only; <strong>email and SMS delivery are not configured</strong>. Stale readings never raise or clear alerts.
+  {% if evaluation %}Last evaluation: {{ evaluation.last_attempt.strftime('%Y-%m-%d %H:%M') }} UTC ({{ evaluation.summary.rules_evaluated }} live rule(s), {{ evaluation.summary.created }} new, {{ evaluation.summary.cleared }} cleared, {{ evaluation.summary.stale_skipped }} stale readings skipped).{% endif %}</div>
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto"><select class="form-select" name="status" aria-label="Status filter"><option value="">All</option>
+    {% for s in statuses %}<option {{ 'selected' if s == status else '' }}>{{ s }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><button class="btn btn-primary" type="submit">Filter</button></div>
+</form>
+<div class="es-card"><div class="table-responsive"><table class="table table-sm mb-0">
+  <thead><tr><th>Raised (UTC)</th><th>Rule</th><th>City / station</th><th>Condition</th><th>Value</th><th>Data type</th><th>Severity</th><th>Status</th><th></th></tr></thead>
+  <tbody>{% for a in alerts %}<tr>
+    <td>{{ a.evaluated_at.strftime('%Y-%m-%d %H:%M') }}<div class="small text-muted">measured {{ a.observed_at.strftime('%H:%M') }}</div></td>
+    <td>{{ a.rule_name }}</td><td>{{ names[a.city_id] }}{% if a.station %}<div class="small text-muted">{{ a.station }}</div>{% endif %}</td>
+    <td>{{ labels[a.variable] }} {{ a.operator }} {{ a.threshold }}</td><td>{{ a.value }} {{ a.unit }}{% if a.last_value != a.value %}<div class="small text-muted">now {{ a.last_value }}</div>{% endif %}</td>
+    <td><span class="badge {{ 'bg-success' if a.value_origin == 'observed' else 'bg-secondary' }}">{{ a.value_origin|upper }}</span></td>
+    <td>{{ a.severity }}</td>
+    <td><span class="badge {{ 'bg-danger' if a.status == 'open' else ('bg-info' if a.status == 'acknowledged' else 'badge-status-off') }}">{{ a.status }}</span>
+      {% if a.acknowledged_by %}<div class="small text-muted">by {{ a.acknowledged_by }}</div>{% endif %}</td>
+    <td>{% if a.status == 'open' %}<form method="post" action="/alerts/history/{{ a._id }}/ack">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="btn btn-sm btn-outline-primary" type="submit">Acknowledge</button></form>{% endif %}</td>
+  </tr>{% else %}<tr><td colspan="9" class="text-muted">No alerts.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

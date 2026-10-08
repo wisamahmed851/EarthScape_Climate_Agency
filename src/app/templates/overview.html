@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+<h1 class="es-page-title h3 mb-3">Overview</h1>
+{% if not o %}
+<div class="alert alert-warning">{{ store.error }}{% if user.role == 'Administrator' %} Use the refresh button on the <a href="/sources">Data Sources</a> page.{% endif %}</div>
+{% else %}
+<form method="get" class="row g-2 align-items-end mb-3">
+  <div class="col-auto"><label class="form-label" for="city">City</label>
+    <select class="form-select" id="city" name="city">{% for c in cities %}<option value="{{ c }}" {{ 'selected' if c == city else '' }}>{{ names[c] }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><button class="btn btn-primary" type="submit">Show</button></div>
+</form>
+<div class="es-source-banner mb-3">{{ power_label }} Values below are derived from hourly values (daily and monthly aggregates computed with Hadoop MapReduce).</div>
+<div class="row g-3 mb-3">
+  <div class="col-6 col-lg-3"><div class="es-card es-kpi"><div class="label">Mean temperature</div><div class="value">{{ o.mean_temperature_c }} &deg;C</div><div class="note">mean of daily means, {{ o.first_date[:4] }}-{{ o.last_date[:4] }}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="es-card es-kpi"><div class="label">Highest hourly value</div><div class="value">{{ o.highest_daily_max_c.value }} &deg;C</div><div class="note">on {{ o.highest_daily_max_c.date }} (hourly grid value, not an instantaneous peak)</div></div></div>
+  <div class="col-6 col-lg-3"><div class="es-card es-kpi"><div class="label">Lowest hourly value</div><div class="value">{{ o.lowest_daily_min_c.value }} &deg;C</div><div class="note">on {{ o.lowest_daily_min_c.date }}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="es-card es-kpi"><div class="label">Mean annual precipitation</div><div class="value">{{ o.mean_annual_precipitation_mm }} mm</div><div class="note">sum of daily totals per year</div></div></div>
+  <div class="col-6 col-lg-3"><div class="es-card es-kpi"><div class="label">Mean relative humidity</div><div class="value">{{ o.mean_humidity_pct }} %</div><div class="note">at 2 m</div></div></div>
+  <div class="col-6 col-lg-3"><div class="es-card es-kpi"><div class="label">Mean wind speed</div><div class="value">{{ o.mean_wind_m_s }} m/s</div><div class="note">at 2 m</div></div></div>
+  <div class="col-6 col-lg-3"><div class="es-card es-kpi"><div class="label">Mean surface pressure</div><div class="value">{{ o.mean_pressure_kpa }} kPa</div><div class="note">daily means</div></div></div>
+</div>
+<div class="row g-3">
+  <div class="col-lg-6"><div class="es-card"><h2>Data coverage</h2>
+    <table class="table table-sm mb-0"><tbody>
+      <tr><th>Period</th><td>{{ o.first_date }} to {{ o.last_date }} (UTC)</td></tr>
+      <tr><th>Days in dataset</th><td>{{ o.days }}</td></tr>
+      <tr><th>Days with all 24 hours</th><td>{{ o.days_with_24_hours }}</td></tr>
+      <tr><th>Days without a precipitation total</th><td>{{ o.days_without_precipitation_total }}</td></tr>
+    </tbody></table></div></div>
+  <div class="col-lg-6"><div class="es-card"><h2>Provenance</h2>
+    <table class="table table-sm mb-0"><tbody>
+      <tr><th>Source</th><td>NASA POWER hourly, community AG</td></tr>
+      <tr><th>Class</th><td>Gridded reanalysis + satellite-derived radiation</td></tr>
+      <tr><th>Daily output</th><td>YARN {{ store.meta.daily.application_id }}</td></tr>
+      <tr><th>Cache refreshed</th><td>{{ store.meta.refreshed_at }}</td></tr>
+    </tbody></table></div></div>
+</div>
+{% endif %}
+{% endblock %}

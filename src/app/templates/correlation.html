@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Correlation{% endblock %}
+{% block content %}
+<h1 class="es-page-title h3 mb-3">Correlation between climate variables</h1>
+{% if not run %}
+<div class="alert alert-warning">No analytics run exists yet. An Administrator must train the analytics (Trends &amp; Extremes page).</div>
+{% else %}
+<form method="get" class="row g-2 align-items-end mb-3">
+  <div class="col-auto"><label class="form-label" for="city">City</label>
+    <select class="form-select" id="city" name="city">{% for c in cities %}<option value="{{ c }}" {{ 'selected' if c == city else '' }}>{{ names[c] }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><button class="btn btn-primary" type="submit">Show</button></div>
+</form>
+<div class="es-source-banner mb-3">Daily values {{ corr.n_days }} days, {{ names[city] }}. Seasonal cycles are removed first (value minus its day-of-year climatology) for temperature, humidity, wind, pressure and solar; precipitation is used as is. Correlation measures association only and does not show cause. {{ run.data_labels.history }}.</div>
+{% macro matrix(m) %}
+<div class="table-responsive"><table class="table table-sm table-bordered text-center mb-0 corr-table">
+  <thead><tr><th></th>{% for v in corr.variables %}<th>{{ v }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for row in m %}{% set i = loop.index0 %}<tr><th>{{ corr.variables[i] }}</th>{% for r in row %}<td class="corr-{{ ((r * 4)|round|int) + 4 }}">{{ '%.2f'|format(r) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+{% endmacro %}
+<div class="row g-3">
+  <div class="col-xl-6"><div class="es-card"><h2>Pearson (linear)</h2>{{ matrix(corr.pearson) }}</div></div>
+  <div class="col-xl-6"><div class="es-card"><h2>Spearman (rank)</h2>{{ matrix(corr.spearman) }}</div></div>
+</div>
+<p class="small text-muted mt-2">Colour: blue = negative, red = positive, white = near zero. Compare the two matrices: a large gap suggests a non-linear or outlier-driven relation. Air-quality variables are not included because the observed PM2.5 record is too short and sparse for a defensible comparison with 25 years of reanalysis.</p>
+{% endif %}
+{% endblock %}

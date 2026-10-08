@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Historical Climate{% endblock %}
+{% block content %}
+<h1 class="es-page-title h3 mb-3">Historical Climate</h1>
+{% if not ready %}
+<div class="alert alert-warning">{{ store.error }}</div>
+{% else %}
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+<form method="get" class="row g-2 align-items-end mb-3">
+  <div class="col-6 col-md-auto"><label class="form-label" for="city">City</label>
+    <select class="form-select" id="city" name="city">{% for c in cities %}<option value="{{ c }}" {{ 'selected' if c == city else '' }}>{{ names[c] }}</option>{% endfor %}</select></div>
+  <div class="col-6 col-md-auto"><label class="form-label" for="start">From</label><input class="form-control" type="date" id="start" name="start" value="{{ start }}" min="{{ first }}" max="{{ last }}"></div>
+  <div class="col-6 col-md-auto"><label class="form-label" for="end">To</label><input class="form-control" type="date" id="end" name="end" value="{{ end }}" min="{{ first }}" max="{{ last }}"></div>
+  <div class="col-6 col-md-auto"><label class="form-label" for="granularity">Resolution</label>
+    <select class="form-select" id="granularity" name="granularity"><option value="daily" {{ 'selected' if granularity == 'daily' else '' }}>Daily</option><option value="monthly" {{ 'selected' if granularity == 'monthly' else '' }}>Monthly</option></select></div>
+  <div class="col-auto"><button class="btn btn-primary" type="submit">Apply</button></div>
+</form>
+<div class="es-source-banner mb-3">{{ power_label }}</div>
+<div id="chart-error" class="alert alert-danger d-none"></div>
+<div id="chart-root" data-kind="history" data-api="/api/series?city={{ city }}&amp;start={{ start }}&amp;end={{ end }}&amp;granularity={{ granularity }}"></div>
+<div class="row g-3">
+  <div class="col-lg-6"><div class="es-card"><h2>Temperature</h2><div class="chart-box"><canvas id="c-temp"></canvas></div></div></div>
+  <div class="col-lg-6"><div class="es-card"><h2>Precipitation</h2><div class="chart-box"><canvas id="c-rain"></canvas></div></div></div>
+  <div class="col-lg-6"><div class="es-card"><h2>Relative humidity</h2><div class="chart-box"><canvas id="c-hum"></canvas></div></div></div>
+  <div class="col-lg-6"><div class="es-card"><h2>Wind speed</h2><div class="chart-box"><canvas id="c-wind"></canvas></div></div></div>
+</div>
+<p class="small text-muted mt-2">Gaps in a line mean the value is missing; nothing is interpolated. Minimum and maximum are the lowest and highest hourly grid values of each day or month.</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% if ready %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script><script src="/static/charts.js"></script>{% endif %}{% endblock %}

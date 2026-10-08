@@ -1,0 +1,7 @@
+{
+  "karachi":   {"name": "Karachi",   "province": "Sindh",                       "latitude": 24.8608,  "longitude": 67.0104},
+  "lahore":    {"name": "Lahore",    "province": "Punjab",                      "latitude": 31.558,   "longitude": 74.35071},
+  "islamabad": {"name": "Islamabad", "province": "Islamabad Capital Territory", "latitude": 33.72148, "longitude": 73.04329},
+  "peshawar":  {"name": "Peshawar",  "province": "Khyber Pakhtunkhwa",          "latitude": 34.008,   "longitude": 71.57849},
+  "quetta":    {"name": "Quetta",    "province": "Balochistan",                 "latitude": 30.18414, "longitude": 67.00141}
+}

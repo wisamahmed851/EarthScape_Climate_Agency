@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Trends & Extremes{% endblock %}
+{% block content %}
+<h1 class="es-page-title h3 mb-3">Trends, anomalies and extreme events</h1>
+{% if not run %}
+<div class="alert alert-warning">No analytics run exists yet. {% if user.role == 'Administrator' %}Use "Retrain analytics" below (needs the data cache).{% else %}An Administrator must train the analytics.{% endif %}</div>
+{% else %}
+<form method="get" class="row g-2 align-items-end mb-3">
+  <div class="col-auto"><label class="form-label" for="city">City</label>
+    <select class="form-select" id="city" name="city">{% for c in cities %}<option value="{{ c }}" {{ 'selected' if c == city else '' }}>{{ names[c] }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><button class="btn btn-primary" type="submit">Show</button></div>
+</form>
+<div class="es-source-banner mb-3">{{ run.data_labels.history }}. Analysis version {{ run.model_version }}, trained {{ run.created_at.strftime('%Y-%m-%d %H:%M') }} UTC (seed {{ run.seed }}). Trends over 25 years of reanalysis are descriptive; they are not proof of a physical cause, and reanalysis can contain artefacts from changing input data.</div>
+<div class="es-card mb-3"><h2>Trend (Theil-Sen slope, Mann-Kendall test)</h2>
+  <div class="table-responsive"><table class="table table-sm mb-0">
+    <thead><tr><th>Variable (annual)</th><th>Slope per decade</th><th>95% interval</th><th>Kendall tau</th><th>p-value</th><th>Reading</th></tr></thead>
+    <tbody>{% for k, t in payload.trend.items() %}<tr><td>{{ k|capitalize }} ({{ t.unit }})</td><td>{{ t.slope_per_decade }}</td><td>{{ t.ci95_per_decade[0] }} to {{ t.ci95_per_decade[1] }}</td>
+      <td>{{ t.kendall_tau }}</td><td>{{ t.p_value }}</td><td>{{ 'statistically significant at 5%' if t.significant_at_5pct else 'not significant at 5% (n = ' ~ t.n_years ~ ' years)' }}</td></tr>{% endfor %}</tbody></table></div></div>
+<script id="payload" data-kind="trends" type="application/json">{{ payload|tojson }}</script>
+<div class="row g-3 mb-3">
+  <div class="col-lg-6"><div class="es-card"><h2>Annual mean temperature</h2><div class="chart-box"><canvas id="c-trend-temp"></canvas></div></div></div>
+  <div class="col-lg-6"><div class="es-card"><h2>Annual precipitation</h2><div class="chart-box"><canvas id="c-trend-rain"></canvas></div></div></div>
+</div>
+{% set a = payload.anomalies %}
+<div class="es-card mb-3"><h2>Anomaly detection (daily mean temperature)</h2>
+  <p class="small">Method: day-of-year climatology fitted on 2001-2015 only; robust z-score (median/MAD by month) with |z| &gt; 3.5; an Isolation Forest (contamination 1%, fitted on 2001-2015 only) as a second opinion. Both applied to 2016-2025. This is unsupervised: there are no ground-truth labels, so flags are <em>unusual days relative to the training climate</em>, not confirmed events. Because the climate warms in the test years, positive flags may increase.</p>
+  <div class="row g-3">
+    <div class="col-lg-5"><table class="table table-sm mb-0"><tbody>
+      <tr><th>Robust-z flag rate, training years</th><td>{{ (a.zscore_flag_rate_train * 100)|round(2) }}% ({{ a.train_days }} days)</td></tr>
+      <tr><th>Robust-z flag rate, test years</th><td>{{ (a.zscore_flag_rate_test * 100)|round(2) }}% ({{ a.test_days }} days)</td></tr>
+      <tr><th>Isolation Forest rate, training</th><td>{{ (a.isolation_forest_flag_rate_train * 100)|round(2) }}%</td></tr>
+      <tr><th>Isolation Forest rate, test</th><td>{{ (a.isolation_forest_flag_rate_test * 100)|round(2) }}%</td></tr>
+      <tr><th>Test days flagged by both methods</th><td>{{ a.both_methods_test_days }}</td></tr></tbody></table>
+      <h3 class="h6 mt-3">Most extreme flagged days</h3>
+      <table class="table table-sm mb-0"><thead><tr><th>Date</th><th>Mean temp (C)</th><th>Anomaly (C)</th><th>Robust z</th></tr></thead>
+        <tbody>{% for d in a.top_zscore_days[:8] %}<tr><td>{{ d.date }}</td><td>{{ d.temperature_c }}</td><td>{{ d.anomaly_c }}</td><td>{{ d.robust_z }}</td></tr>{% endfor %}</tbody></table></div>
+    <div class="col-lg-7"><div class="chart-box"><canvas id="c-anom"></canvas></div></div>
+  </div></div>
+<div class="es-card"><h2>Extreme-event indices (Hadoop MapReduce yearly job)</h2>
+  {% if payload.extremes %}
+  <p class="small">Counted from daily values with standard index thresholds (hot day: highest hourly value &ge; 35 C; frost day: lowest hourly value &lt; 0 C; heavy precipitation &ge; 10 mm/day). Hourly grid values, not instantaneous or station extremes.</p>
+  <div class="row g-3">
+    <div class="col-lg-6"><div class="chart-box"><canvas id="c-hot"></canvas></div></div>
+    <div class="col-lg-6"><div class="chart-box"><canvas id="c-frost"></canvas></div></div>
+    <div class="col-lg-6"><div class="chart-box"><canvas id="c-heavy"></canvas></div></div>
+    <div class="col-lg-6"><div class="chart-box"><canvas id="c-annual-rain"></canvas></div></div>
+  </div>
+  {% else %}<p class="text-muted mb-0">The yearly MapReduce output is not in the data cache yet. An Administrator should refresh the data cache on the Data Sources page.</p>{% endif %}
+</div>
+{% endif %}
+{% if user.role == 'Administrator' %}
+<form method="post" action="/admin/ml/train" class="mt-3"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <button class="btn btn-outline-primary" type="submit">Retrain analytics</button>
+  <span class="small text-muted ms-2">Re-runs all analyses on the current verified cache (about 10 s) and stores a new versioned run.</span></form>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% if run %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script><script src="/static/charts.js"></script>{% endif %}{% endblock %}

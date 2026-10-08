@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Feedback{% endblock %}
+{% block content %}
+<h1 class="es-page-title h3 mb-3">Feedback and support</h1>
+<div class="es-card es-narrow">
+  <form method="post" action="/feedback">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <div class="mb-3"><label class="form-label" for="category">Type</label>
+      <select class="form-select" id="category" name="category">{% for c in categories %}<option>{{ c }}</option>{% endfor %}</select></div>
+    <div class="mb-3"><label class="form-label" for="subject">Subject</label><input class="form-control" id="subject" name="subject" maxlength="120" required></div>
+    <div class="mb-3"><label class="form-label" for="message">Message</label><textarea class="form-control" id="message" name="message" rows="6" maxlength="2000" required></textarea></div>
+    <button class="btn btn-primary" type="submit">Submit</button>
+  </form>
+</div>
+{% endblock %}

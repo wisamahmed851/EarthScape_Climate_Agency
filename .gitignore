@@ -41,3 +41,11 @@ logs/
 .DS_Store
 Thumbs.db
 .idea/
+
+# local download staging (incomplete/failed downloads)
+data/staging/*
+
+# backups of application data (contain password hashes)
+backups/
+
+dist/

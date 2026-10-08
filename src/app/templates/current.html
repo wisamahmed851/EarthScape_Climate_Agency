@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Current Data{% endblock %}
+{% block content %}
+<h1 class="es-page-title h3 mb-3">Current data</h1>
+<div class="es-source-banner mb-3">Near-real-time <strong>REST polling</strong>, not continuous event streaming. <strong>Open-Meteo</strong> weather and air quality are <strong>model output</strong>, not measurements. <strong>OpenAQ</strong> PM2.5 is <strong>observed</strong> by third-party monitors (many are low-cost sensors); coverage is sparse and values come from different sensors.</div>
+
+<div class="es-card mb-3"><h2>Source freshness</h2>
+  <div class="table-responsive"><table class="table table-sm mb-0">
+    <thead><tr><th>Source</th><th>Type</th><th>Newest reading (UTC)</th><th>Age</th><th>Last attempt</th><th>Failures in a row</th><th>Stored last cycle</th><th>Readings kept</th></tr></thead>
+    <tbody>{% for f in fresh %}<tr>
+      <td>{{ f.label }}</td><td><span class="badge {{ 'bg-success' if f.origin == 'observed' else 'bg-secondary' }}">{{ f.origin|upper }}</span></td>
+      <td>{{ f.last_observed.strftime('%Y-%m-%d %H:%M') if f.last_observed else 'none yet' }}</td>
+      <td>{% if f.age_minutes is none %}n/a{% else %}{{ f.age_minutes }} min {% if f.stale %}<span class="badge text-bg-warning">STALE</span>{% endif %}{% endif %}</td>
+      <td>{{ f.last_attempt.strftime('%Y-%m-%d %H:%M') if f.last_attempt else 'never' }}</td><td>{{ f.consecutive_failures }}</td>
+      <td>{{ f.stored_last_cycle if f.stored_last_cycle is not none else 'n/a' }}</td><td>{{ f.readings_total }}</td></tr>
+      {% if f.last_errors %}<tr><td colspan="8" class="small text-danger">Last errors: {{ f.last_errors|join('; ') }}</td></tr>{% endif %}{% endfor %}</tbody>
+  </table></div>
+  <p class="small text-muted mt-2 mb-0">{% if polling %}Background polling is running (weather and air quality every few minutes, OpenAQ hourly).{% else %}Background polling is not running in this server process.{% endif %} Stale readings are shown but never used to raise or clear alerts.</p>
+  {% if user.role == 'Administrator' %}
+  <form method="post" action="/admin/poll" class="mt-2"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="btn btn-sm btn-primary" type="submit">Poll all sources now</button></form>
+  {% endif %}
+</div>
+
+<div class="es-card mb-3"><h2>Latest by city</h2>
+  <div class="table-responsive"><table class="table table-sm mb-0">
+    <thead><tr><th>City</th><th>Temp (C)</th><th>RH (%)</th><th>Precip (mm)</th><th>Wind 10 m (km/h)</th><th>Pressure (hPa)</th><th>Weather as of (UTC)</th>
+      <th>PM2.5 modelled</th><th>PM10 modelled</th><th>US AQI modelled</th><th>PM2.5 observed (OpenAQ)</th></tr></thead>
+    <tbody>{% for c in cities %}{% set e = latest[c] %}<tr>
+      <td>{{ names[c] }}</td>
+      {% if e.weather %}{% set v = e.weather['values'] %}
+      <td>{{ v.temperature_2m }}</td><td>{{ v.relative_humidity_2m }}</td><td>{{ v.precipitation }}</td><td>{{ v.wind_speed_10m }}</td><td>{{ v.surface_pressure }}</td>
+      <td>{{ e.weather.observed_at.strftime('%m-%d %H:%M') }} {% if e.weather.stale %}<span class="badge text-bg-warning">STALE</span>{% endif %}</td>
+      {% else %}<td colspan="6" class="text-muted">no data yet</td>{% endif %}
+      {% if e.air_quality %}{% set a = e.air_quality['values'] %}<td>{{ a.pm2_5 }}</td><td>{{ a.pm10 }}</td><td>{{ a.us_aqi }}</td>{% else %}<td colspan="3" class="text-muted">no data yet</td>{% endif %}
+      <td>{% if e.openaq %}{% set fresh_st = e.openaq|rejectattr('stale')|list %}
+        {% if fresh_st %}{{ fresh_st|length }} active monitor(s); nearest {{ fresh_st[0]['values'].pm25 }} ug/m3{% else %}<span class="badge text-bg-warning">STALE</span> {{ e.openaq|length }} monitor(s), none recent{% endif %}
+        {% else %}no monitor data{% endif %}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="small text-muted mt-2 mb-0">Units differ by provider: Open-Meteo wind is km/h at 10 m and pressure hPa (POWER history uses m/s at 2 m and kPa). Modelled and observed PM2.5 are separate columns and never merged.</p>
+</div>
+
+<div class="es-card mb-3"><h2>Recent history (stored readings)</h2>
+  <form method="get" class="row g-2 align-items-end mb-2" id="city-form">
+    <div class="col-auto"><label class="form-label" for="city">City</label>
+      <select class="form-select" id="city" name="city">{% for c in cities %}<option value="{{ c }}" {{ 'selected' if c == request.query_params.get('city', cities[0]) else '' }}>{{ names[c] }}</option>{% endfor %}</select></div>
+    <div class="col-auto"><button class="btn btn-primary" type="submit">Show</button></div>
+  </form>
+  <div id="chart-error" class="alert alert-danger d-none"></div>
+  <p id="history-note" class="small text-muted"></p>
+  <div id="chart-root" data-kind="current" data-api="/api/current/history?city={{ request.query_params.get('city', cities[0]) }}&amp;hours=72"></div>
+  <div class="row g-3">
+    <div class="col-lg-6"><div class="chart-box"><canvas id="c-cur-temp"></canvas></div></div>
+    <div class="col-lg-6"><div class="chart-box"><canvas id="c-cur-pm"></canvas></div></div>
+  </div>
+</div>
+
+<div class="es-card mb-3"><h2>Current weather versus historical reference</h2>
+  <div class="es-source-banner mb-2">Open-Meteo <strong>modelled</strong> values compared with a <strong>NASA POWER reanalysis climatology</strong> (2001-2025, same UTC hour, +-7 calendar days, mean and typical spread +-1 SD). These are two different models on different grids, not two measurements of one thing; differences of a degree or two can be model or grid differences, not weather. Only temperature and relative humidity are comparable; wind (10 m vs 2 m), pressure (hPa vs kPa), precipitation and PM2.5 are not compared.</div>
+  <div id="cmp-note" class="small text-muted mb-2"></div>
+  <div id="cmp-summary" class="table-responsive"></div>
+  <div class="row g-3">
+    <div class="col-lg-6"><div class="chart-box"><canvas id="c-cmp-temp"></canvas></div></div>
+    <div class="col-lg-6"><div class="chart-box"><canvas id="c-cmp-hum"></canvas></div></div>
+  </div>
+  <div id="cmp-root" data-api="/api/current/comparison?city={{ request.query_params.get('city', cities[0]) }}&amp;hours=24"></div>
+</div>
+
+<div class="es-card"><h2>OpenAQ monitors (observed PM2.5)</h2>
+  {% for c in cities %}{% if latest[c].openaq %}
+  <h3 class="h6 mt-3">{{ names[c] }}</h3>
+  <div class="table-responsive"><table class="table table-sm mb-0">
+    <thead><tr><th>Location</th><th>Sensor class</th><th>Data provider</th><th>Distance (km)</th><th>PM2.5 (ug/m3)</th><th>Measured (UTC)</th><th></th></tr></thead>
+    <tbody>{% for s in latest[c].openaq %}<tr><td>{{ s.provider.location_name }}</td><td>{{ s.provider.sensor_class }}</td><td>{{ s.provider.data_provider }}</td>
+      <td>{{ s.provider.distance_km }}</td><td>{{ s['values'].pm25 }}</td><td>{{ s.observed_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td>{% if s.stale %}<span class="badge text-bg-warning">STALE</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+  {% endif %}{% endfor %}
+  {% if not latest.values()|selectattr('openaq')|list %}<p class="text-muted mb-0">No OpenAQ readings stored yet (a poll runs hourly; an Administrator can poll now).</p>{% endif %}
+</div>
+{% endblock %}
+{% block scripts %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script><script src="/static/charts.js"></script>{% endblock %}

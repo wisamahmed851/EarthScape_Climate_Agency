@@ -1,0 +1,59 @@
+:root {
+  /* palette taken from the EarthScape project document and logo */
+  --es-primary: #2C807C;
+  --es-primary-dark: #015456;
+  --es-navy: #00193d;
+  --es-accent: #3D9586;
+  --es-gold: #FFC000;
+  --es-bg: #f2f7f6;
+  --es-ink: #14223a;
+  --es-muted: #55656b;
+  --es-card: #ffffff;
+  --es-border: #d3e2df;
+  --bs-primary: var(--es-primary);
+  --bs-primary-rgb: 44, 128, 124;
+  --bs-link-color: var(--es-primary-dark);
+  --bs-link-hover-color: var(--es-navy);
+  --bs-body-bg: var(--es-bg);
+  --bs-body-color: var(--es-ink);
+  --bs-body-font-family: "Open Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+h1, h2, h3, .es-brand strong { font-family: "Book Antiqua", "Palatino Linotype", Palatino, Georgia, serif; }
+body { background: var(--es-bg); color: var(--es-ink); }
+.btn-primary { --bs-btn-bg: var(--es-primary); --bs-btn-border-color: var(--es-primary); --bs-btn-hover-bg: var(--es-primary-dark);
+  --bs-btn-hover-border-color: var(--es-primary-dark); --bs-btn-active-bg: var(--es-primary-dark); --bs-btn-active-border-color: var(--es-primary-dark); }
+.btn-outline-primary { --bs-btn-color: var(--es-primary-dark); --bs-btn-border-color: var(--es-primary); --bs-btn-hover-bg: var(--es-primary);
+  --bs-btn-hover-border-color: var(--es-primary); }
+.es-navbar { background: #fff; border-bottom: 3px solid var(--es-primary); box-shadow: 0 1px 6px rgba(0, 25, 61, .08); }
+.es-brand { display: flex; align-items: center; gap: .6rem; padding: 0; color: var(--es-navy); }
+.es-brand img { width: auto; height: 32px; }
+.es-brand span { display: flex; flex-direction: column; line-height: 1.05; }
+.es-brand strong { font-size: 1.25rem; color: var(--es-navy); letter-spacing: .01em; }
+.es-brand small { font-size: .62rem; letter-spacing: .22em; text-transform: uppercase; color: var(--es-primary-dark); }
+.es-navbar .nav-link { color: var(--es-navy); font-weight: 600; font-size: .92rem; border-bottom: 2px solid transparent; }
+.es-navbar .nav-link:hover, .es-navbar .nav-link.active { color: var(--es-primary-dark); border-bottom-color: var(--es-primary); }
+.es-user { color: var(--es-muted); }
+.es-login-logo { max-width: 100%; height: auto; }
+.es-tagline { color: var(--es-primary-dark); letter-spacing: .04em; font-weight: 600; }
+.es-card { background: var(--es-card); border: 1px solid var(--es-border); border-top: 3px solid var(--es-accent); border-radius: .6rem; padding: 1.1rem 1.25rem; height: 100%; box-shadow: 0 1px 3px rgba(0, 25, 61, .05); }
+.es-card h2, .es-card h3 { font-size: 1rem; font-weight: 600; margin-bottom: .75rem; }
+.es-narrow { max-width: 720px; height: auto; }
+.es-kpi .label { color: var(--es-muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
+.es-kpi .value { font-size: 1.7rem; font-weight: 700; color: var(--es-navy); line-height: 1.2; }
+.es-kpi .note { color: var(--es-muted); font-size: .8rem; }
+.es-source-banner { background: #fff7ea; border: 1px solid #f0d9b0; border-left: 4px solid var(--es-accent); border-radius: .4rem;
+  padding: .6rem .9rem; font-size: .85rem; color: #5a3d0d; }
+.es-page-title { font-weight: 700; color: var(--es-navy); }
+.table thead th { background: var(--es-accent); color: #fff; border-color: var(--es-accent); font-weight: 600; }
+body { background-image: linear-gradient(180deg, rgba(61, 149, 134, .07), transparent 220px); background-repeat: no-repeat; }
+.chart-box { position: relative; height: 300px; }
+.es-footer { color: var(--es-muted); font-size: .8rem; }
+.es-login { max-width: 400px; margin: 8vh auto; }
+.es-message { white-space: pre-wrap; }
+.table > :not(caption) > * > * { vertical-align: middle; }
+.badge-status-ok { background: #1c7c4a; }
+.badge-status-off { background: #7a8585; }
+.corr-0 { background: #2166ac; color: #fff; } .corr-1 { background: #4393c3; color: #fff; } .corr-2 { background: #92c5de; }
+.corr-3 { background: #d1e5f0; } .corr-4 { background: #f7f7f7; } .corr-5 { background: #fddbc7; } .corr-6 { background: #f4a582; }
+.corr-7 { background: #d6604d; color: #fff; } .corr-8 { background: #b2182b; color: #fff; }
+.corr-table th { font-weight: 600; font-size: .8rem; }

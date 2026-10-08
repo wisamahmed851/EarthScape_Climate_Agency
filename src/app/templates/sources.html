@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Data Sources{% endblock %}
+{% block content %}
+<h1 class="es-page-title h3 mb-3">Data Sources</h1>
+<div class="es-card mb-3"><h2>Providers</h2>
+  <div class="table-responsive"><table class="table table-sm mb-0">
+    <thead><tr><th>Source</th><th>Classification</th><th>Status</th><th>Notes</th></tr></thead>
+    <tbody>{% for s in sources %}<tr><td>{{ s.name }}</td><td>{{ s.klass }}</td>
+      <td><span class="badge {{ 'badge-status-ok' if s.status == 'Implemented' else 'badge-status-off' }}">{{ s.status }}</span></td><td>{{ s.detail }}</td></tr>{% endfor %}</tbody>
+  </table></div></div>
+<div class="es-card mb-3"><h2>NASA POWER pipeline status and freshness</h2>
+  {% if meta %}
+  <div class="table-responsive"><table class="table table-sm mb-0">
+    <thead><tr><th>Layer</th><th>Objects ok</th><th>Failed (latest record)</th><th>Latest record</th></tr></thead>
+    <tbody>
+      {% for key, label in [('power_hourly_gridded', 'RAW (city-year files)'), ('power_hourly_interim', 'INTERIM (city files)'), ('power_daily', 'PROCESSED daily job'), ('power_monthly', 'PROCESSED monthly job'), ('power_yearly', 'PROCESSED yearly job (extreme events)')] %}
+      <tr><td>{{ label }}</td><td>{{ meta.manifests[key].ok if key in meta.manifests else 'not cached' }}</td><td>{{ meta.manifests[key].failed if key in meta.manifests else '-' }}</td><td>{{ (meta.manifests[key].latest or 'n/a') if key in meta.manifests else '-' }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  <table class="table table-sm mt-3 mb-0"><tbody>
+    <tr><th>Daily output</th><td>{{ meta.daily.record_count }} rows, YARN {{ meta.daily.application_id }} ({{ meta.daily.yarn_final_state }}), sha256 <code>{{ meta.daily.sha256[:16] }}...</code></td></tr>
+    <tr><th>Monthly output</th><td>{{ meta.monthly.record_count }} rows, YARN {{ meta.monthly.application_id }} ({{ meta.monthly.yarn_final_state }}), sha256 <code>{{ meta.monthly.sha256[:16] }}...</code></td></tr>
+    {% if meta.yearly %}<tr><th>Yearly output</th><td>{{ meta.yearly.record_count }} rows, YARN {{ meta.yearly.application_id }} ({{ meta.yearly.yarn_final_state }}), sha256 <code>{{ meta.yearly.sha256[:16] }}...</code></td></tr>{% endif %}
+    <tr><th>Cache refreshed from HDFS</th><td>{{ meta.refreshed_at }}</td></tr>
+  </tbody></table>
+  {% else %}<div class="alert alert-warning mb-0">{{ data_error }}</div>{% endif %}
+  {% if user.role == 'Administrator' %}
+  <form method="post" action="/admin/data/refresh" class="mt-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <button class="btn btn-primary" type="submit">Refresh from HDFS</button>
+    <span class="small text-muted ms-2">Needs HDFS running. Validates size, checksum, header and row counts against the provenance manifests; keeps the old cache if anything fails.</span>
+  </form>
+  {% endif %}
+</div>
+<div class="es-card mb-3"><h2>Current-data sources</h2>
+  <p class="mb-2">Live freshness, staleness, failures and stored counts for Open-Meteo weather, Open-Meteo air quality and OpenAQ are on the <a href="/current">Current Data</a> page. Raw polling responses are staged locally and sealed into HDFS RAW (<code>/earthscape/raw/&lt;source&gt;/date=YYYY-MM-DD/</code>) after each UTC day ends, with a manifest line.</p></div>
+<p class="small text-muted">Ingestion status is read from the provenance manifests at refresh time. Sources marked "Not implemented" have no data in this application.</p>
+{% endblock %}
