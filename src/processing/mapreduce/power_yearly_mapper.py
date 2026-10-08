@@ -1,10 +1,9 @@
-#!/usr/bin/env python3
-"""Hadoop Streaming mapper: POWER daily rows -> `city_id|YYYY <tab> remaining 15 daily fields`."""
+"""Hadoop Streaming mapper: POWER daily rows -> `city_id|YYYY <tab> remaining 15 daily fields`"""
 import sys
 
 
 def map_line(line):
-    """Return (key, value) for a daily row, None for the header; a malformed row fails the job."""
+    """Return (key, value) for a daily row, None for the header; a malformed row fails the job"""
     f = line.rstrip("\n").split(",")
     if f[0] == "city_id":
         return None

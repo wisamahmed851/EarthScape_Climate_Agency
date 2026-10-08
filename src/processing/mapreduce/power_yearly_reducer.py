@@ -1,12 +1,4 @@
-#!/usr/bin/env python3
-"""Hadoop Streaming reducer: all daily rows of one city-year -> one 15-field extreme-event/annual row (power_yearly_v1).
-
-Counts use standard ETCCDI-style index thresholds on the daily values: wet day >= 1 mm, heavy >= 10 mm, very heavy >= 20 mm,
-hot day = daily maximum of HOURLY values >= 35 C, frost day = daily minimum of hourly values < 0 C. Days with an empty
-precipitation total are not counted in any precipitation index and are reported in `days_with_precip_total`. Annual
-precipitation is empty unless every calendar day of the year has a valid total. Mean temperature is weighted by valid
-hours. Single reducer only (it writes the header).
-"""
+"""Hadoop Streaming reducer: all daily rows of one city-year -> one 15-field extreme-event/annual row (power_yearly_v1)"""
 import calendar
 import sys
 from decimal import Decimal, ROUND_HALF_UP
@@ -15,7 +7,6 @@ HEADER = ("city_id,year,days_observed,hours_observed,temperature_2m_mean_c,tempe
           "precipitation_total_mm,max_daily_precipitation_mm,days_with_precip_total,wet_days_ge_1mm,"
           "heavy_precip_days_ge_10mm,very_heavy_precip_days_ge_20mm,hot_days_max_ge_35c,frost_days_min_lt_0c")
 Q = Decimal("0.0001")
-# Daily value fields after the mapper drops city_id and date.
 HOURS, T_MEAN, T_MIN, T_MAX, PRECIP, T_MISS = 0, 1, 2, 3, 5, 9
 
 
@@ -24,7 +15,7 @@ def fmt(d):
 
 
 def reduce_year(key, days):
-    """days: list of 15-item lists of daily field text. Returns the yearly CSV row."""
+    """days: list of 15-item lists of daily field text. Returns the yearly CSV row"""
     city, year = key.split("|")
     expected_days = 366 if calendar.isleap(int(year)) else 365
     num = den = Decimal(0)

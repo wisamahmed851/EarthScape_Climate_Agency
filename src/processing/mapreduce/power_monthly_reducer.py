@@ -1,11 +1,4 @@
-#!/usr/bin/env python3
-"""Hadoop Streaming reducer: all daily rows of one city-month -> one 18-field monthly row (power_monthly_v1).
-
-Monthly means weight each daily mean by that day's valid hours (hours_observed - missing hours), so days with
-less coverage count less. Daily means are already rounded to 4 decimals, so a monthly mean can differ from the
-mean of the hourly values by at most 0.0001. Min/max are the lowest/highest hourly value of the month. Precipitation
-total is empty unless every calendar day of the month is present with a valid daily total. Single reducer only.
-"""
+"""Hadoop Streaming reducer: all daily rows of one city-month -> one 18-field monthly row (power_monthly_v1)"""
 import calendar
 import sys
 from decimal import Decimal, ROUND_HALF_UP
@@ -16,13 +9,12 @@ HEADER = ("city_id,month,days_observed,hours_observed,temperature_2m_mean_c,temp
           "relative_humidity_2m_missing_hours,precipitation_missing_hours,wind_speed_2m_missing_hours,"
           "surface_pressure_missing_hours,solar_irradiance_missing_hours")
 Q = Decimal("0.0001")
-# Daily value fields after the mapper drops city_id and date (index 0 = hours_observed).
 HOURS, T_MEAN, T_MIN, T_MAX, RH, PRECIP, WIND, PRESS, SOLAR = range(9)
 MISS = {T_MEAN: 9, RH: 10, PRECIP: 11, WIND: 12, PRESS: 13, SOLAR: 14}
 
 
 def weighted_mean(days, col):
-    """Mean of daily means weighted by valid hours; empty when no valid hour exists."""
+    """Mean of daily means weighted by valid hours; empty when no valid hour exists"""
     num = den = Decimal(0)
     for d in days:
         valid = int(d[HOURS]) - int(d[MISS[col]])
@@ -35,7 +27,7 @@ def weighted_mean(days, col):
 
 
 def reduce_month(key, days):
-    """days: list of 15-item lists of daily field text. Returns the monthly CSV row."""
+    """days: list of 15-item lists of daily field text. Returns the monthly CSV row"""
     city, month = key.split("|")
     year, mon = int(month[:4]), int(month[5:])
     expected_days = calendar.monthrange(year, mon)[1]

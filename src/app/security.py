@@ -1,4 +1,4 @@
-"""Password hashing (Argon2id), session tokens and CSRF comparison."""
+"""Password hashing (Argon2id), session tokens and CSRF comparison"""
 import hashlib
 import hmac
 import secrets
@@ -7,7 +7,6 @@ from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 
 _hasher = PasswordHasher()
-# Verified when the user does not exist so unknown and known usernames take similar time.
 _DUMMY = _hasher.hash(secrets.token_hex(16))
 
 

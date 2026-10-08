@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "processing" / "batch"))
-import power_interim as p  # noqa: E402
+import power_interim as p
 
 SAMPLE = """-BEGIN HEADER-
 NASA/POWER Source Native Resolution Hourly Data

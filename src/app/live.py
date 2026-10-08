@@ -1,9 +1,4 @@
-"""Current-data collection, alert evaluation and the background poller.
-
-poll_cycle: provider -> raw envelope appended to local staging -> normalised reading upserted into MongoDB
-(`latest_readings`, unique per source/city/station/observed_at) -> alert rules evaluated. Staged days are sealed
-into HDFS RAW once the UTC day is over (`seal_raw`). Polling is near-real-time REST polling, not event streaming.
-"""
+"""Current-data collection, alert evaluation and the background poller"""
 import hashlib
 import json
 import logging
@@ -19,12 +14,11 @@ from . import services
 from .settings import ROOT
 
 sys.path.insert(0, str(ROOT / "src"))
-from ingestion import live_sources as src  # noqa: E402
-from ingestion import nasa_power as hdfs_tools  # noqa: E402  (HDFS helpers only)
+from ingestion import live_sources as src
+from ingestion import nasa_power as hdfs_tools
 
 log = logging.getLogger("earthscape.live")
 STAGING = ROOT / "data" / "staging"
-# A reading older than this is stale: shown as stale and never used to raise or clear an alert.
 STALE_AFTER = {src.WEATHER: timedelta(minutes=60), src.AIRQUALITY: timedelta(hours=3), src.OPENAQ: timedelta(hours=24)}
 RAW_SUBDIR = {src.WEATHER: ("openmeteo_weather_model", "polls.jsonl"), src.AIRQUALITY: ("openmeteo_airquality_model", "polls.jsonl"),
               src.OPENAQ: ("openaq_observed/current", "latest.jsonl")}
@@ -41,9 +35,8 @@ def aware(dt):
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-# ---------- storage ----------
 def store_readings(db, readings):
-    """Upsert; an identical (source, city, station, observed_at) is a duplicate and is not stored twice. Returns new count."""
+    """Upsert; an identical (source, city, station, observed_at) is a duplicate and is not stored twice. Returns new count"""
     new = 0
     for r in readings:
         key = {k: r[k] for k in ("source", "city_id", "station_key", "observed_at")}
@@ -73,7 +66,6 @@ def record_status(db, source, stored, errors):
     db.ingest_status.update_one({"_id": source}, update, upsert=True)
 
 
-# ---------- polling ----------
 def poll_openmeteo(db, source, cities=None):
     stored, errors = 0, []
     for city in cities or src.CITIES:
@@ -111,20 +103,77 @@ def poll_cycle(db, include_openaq=True):
     return result
 
 
-# ---------- HDFS RAW sealing ----------
-SEAL_GRACE = timedelta(minutes=15)   # a poll that straddles midnight may still be writing into the day that just ended
+SEAL_GRACE = timedelta(minutes=15)
 SEAL_META = {src.WEATHER: ("Open-Meteo", "modelled", "https://api.open-meteo.com/v1/forecast"),
              src.AIRQUALITY: ("Open-Meteo Air Quality", "modelled", "https://air-quality-api.open-meteo.com/v1/air-quality"),
              src.OPENAQ: ("OpenAQ", "observed", "https://api.openaq.org/v3")}
 
 
-def seal_raw(db=None):
-    """Upload staged daily files of finished UTC days to HDFS RAW (immutable, verified, one manifest record per object).
+def read_staged_day(path, day):
+    """Return the staged file's bytes, its sha256 and the retrieval times of its envelopes"""
+    body = path.read_bytes()
+    stamps = [json.loads(line)["retrieved_at"] for line in body.splitlines()]
+    if not stamps or any(stamp[:10] != day for stamp in stamps):
+        raise hdfs_tools.IngestError("envelopes do not all belong to this UTC day")
+    return body, hashlib.sha256(body).hexdigest(), stamps
 
-    Safe to repeat or resume after an interruption: an identical object already in HDFS is verified and reused, an
-    identical manifest record is not appended twice, a different object is never overwritten, and the staged file is
-    removed only after the object and its manifest record are both in place. Returns one result per staged day.
-    """
+
+def upload_object(path, final, tmp, sha):
+    """Put the staged file into HDFS (via a temporary path) unless the identical object is already there"""
+    if hdfs_tools.hdfs_exists(final):
+        if hdfs_tools.hdfs_sha256(final) != sha:
+            raise hdfs_tools.IngestError("different object already exists; not overwritten")
+        return
+    hdfs_tools.hdfs_ok("-mkdir", "-p", f"{hdfs_tools.HDFS_ROOT}/_tmp", final.rsplit("/", 1)[0])
+    with open(path, "rb") as f:
+        hdfs_tools.hdfs_ok("-put", "-f", "-", tmp, stdin=f)
+    if hdfs_tools.hdfs_sha256(tmp) != sha:
+        raise hdfs_tools.IngestError("HDFS copy does not match the staged file")
+    hdfs_tools.hdfs_ok("-mv", tmp, final)
+
+
+def manifest_lines(manifest):
+    """Existing manifest lines, creating an empty manifest file when there is none"""
+    if hdfs_tools.hdfs_exists(manifest):
+        return hdfs_tools.hdfs_ok("-cat", manifest).decode("utf-8").splitlines()
+    hdfs_tools.hdfs_ok("-mkdir", "-p", manifest.rsplit("/", 1)[0])
+    hdfs_tools.hdfs_ok("-touchz", manifest)
+    return []
+
+
+def already_recorded(lines, key, sha):
+    records = (json.loads(line) for line in lines if line.strip())
+    return any(r.get("object_key") == key and r.get("sha256") == sha and r.get("status") == "ok" for r in records)
+
+
+def seal_one_day(path, source, folder, name, day):
+    """Seal one staged day into HDFS RAW and the manifest; returns 'sealed' or 'already sealed'"""
+    body, sha, stamps = read_staged_day(path, day)
+    final = f"{hdfs_tools.HDFS_ROOT}/raw/{folder}/date={day}/{name}"
+    tmp = f"{hdfs_tools.HDFS_ROOT}/_tmp/{folder.replace('/', '_')}_{day}.{sha[:12]}"
+    manifest = f"{hdfs_tools.HDFS_ROOT}/_manifest/{folder.split('/')[0]}.jsonl"
+    key = f"{folder}/{day}"
+
+    upload_object(path, final, tmp, sha)
+    if already_recorded(manifest_lines(manifest), key, sha):
+        status = "already sealed"
+    else:
+        provider, origin, api = SEAL_META[source]
+        record = {"object_key": key, "source": folder, "provider": provider, "value_origin": origin, "api": api,
+                  "format": "jsonl envelopes (provider JSON responses, unmodified)", "partition": "UTC day of retrieved_at",
+                  "utc_day": day, "first_retrieved_at": min(stamps), "last_retrieved_at": max(stamps),
+                  "hdfs_path": final, "size_bytes": len(body), "sha256": sha, "record_count": len(stamps), "status": "ok",
+                  "sealed_at": now().isoformat(timespec="seconds")}
+        appended = hdfs_tools.hdfs("-appendToFile", "-", manifest, input=(json.dumps(record) + "\n").encode())
+        if appended.returncode != 0:
+            raise hdfs_tools.IngestError("manifest append failed")
+        status = "sealed"
+    path.unlink()
+    return status
+
+
+def seal_raw(db=None):
+    """Upload staged files of finished UTC days to HDFS RAW; a failed day stays staged for the next attempt"""
     results = []
     cutoff = (now() - SEAL_GRACE).strftime("%Y-%m-%d")
     for source, (folder, name) in RAW_SUBDIR.items():
@@ -134,58 +183,53 @@ def seal_raw(db=None):
                 continue
             key = f"{folder}/{day}"
             try:
-                body = path.read_bytes()
-                sha = hashlib.sha256(body).hexdigest()
-                stamps = [json.loads(line)["retrieved_at"] for line in body.splitlines()]
-                if not stamps or any(t[:10] != day for t in stamps):
-                    raise hdfs_tools.IngestError("envelopes do not all belong to this UTC day")
-                final = f"{hdfs_tools.HDFS_ROOT}/raw/{folder}/date={day}/{name}"
-                manifest = f"{hdfs_tools.HDFS_ROOT}/_manifest/{folder.split('/')[0]}.jsonl"
-                if hdfs_tools.hdfs_exists(final):
-                    if hdfs_tools.hdfs_sha256(final) != sha:
-                        raise hdfs_tools.IngestError("different object already exists; not overwritten")
-                else:
-                    tmp = f"{hdfs_tools.HDFS_ROOT}/_tmp/{folder.replace('/', '_')}_{day}.{sha[:12]}"
-                    hdfs_tools.hdfs_ok("-mkdir", "-p", f"{hdfs_tools.HDFS_ROOT}/_tmp", final.rsplit("/", 1)[0])
-                    with open(path, "rb") as f:
-                        hdfs_tools.hdfs_ok("-put", "-f", "-", tmp, stdin=f)
-                    if hdfs_tools.hdfs_sha256(tmp) != sha:
-                        raise hdfs_tools.IngestError("HDFS copy does not match the staged file")
-                    hdfs_tools.hdfs_ok("-mv", tmp, final)
-                if hdfs_tools.hdfs_exists(manifest):
-                    recorded = hdfs_tools.hdfs_ok("-cat", manifest).decode("utf-8").splitlines()
-                else:
-                    hdfs_tools.hdfs_ok("-mkdir", "-p", manifest.rsplit("/", 1)[0])
-                    hdfs_tools.hdfs_ok("-touchz", manifest)
-                    recorded = []
-                if any((r := json.loads(line)).get("object_key") == key and r.get("sha256") == sha and r.get("status") == "ok"
-                       for line in recorded if line.strip()):
-                    status = "already sealed"
-                else:
-                    provider, origin, api = SEAL_META[source]
-                    rec = {"object_key": key, "source": folder, "provider": provider, "value_origin": origin, "api": api,
-                           "format": "jsonl envelopes (provider JSON responses, unmodified)", "partition": "UTC day of retrieved_at",
-                           "utc_day": day, "first_retrieved_at": min(stamps), "last_retrieved_at": max(stamps),
-                           "hdfs_path": final, "size_bytes": len(body), "sha256": sha, "record_count": len(stamps), "status": "ok",
-                           "sealed_at": now().isoformat(timespec="seconds")}
-                    r = hdfs_tools.hdfs("-appendToFile", "-", manifest, input=(json.dumps(rec) + "\n").encode())
-                    if r.returncode != 0:
-                        raise hdfs_tools.IngestError("manifest append failed")
-                    status = "sealed"
-                path.unlink()
-                results.append({"object": key, "status": status})
-            except Exception as e:   # HDFS down, bad staged file, conflicting object: keep the staged file for the next attempt
+                results.append({"object": key, "status": seal_one_day(path, source, folder, name, day)})
+            except Exception as e:
                 results.append({"object": key, "status": "kept locally", "reason": f"{type(e).__name__}: {e}"[:200]})
     return results
 
 
-# ---------- alert evaluation ----------
-def evaluate_alerts(db):
-    """Evaluate enabled live-variable rules against each city's latest non-stale readings.
+def latest_reading_per_station(db, source, city, field):
+    return [item["doc"] for item in db.latest_readings.aggregate([
+        {"$match": {"source": source, "city_id": city, f"values.{field}": {"$exists": True}}},
+        {"$sort": {"observed_at": -1}},
+        {"$group": {"_id": "$station_key", "doc": {"$first": "$$ROOT"}}}])]
 
-    One alert per (rule, city, station) episode: while the condition keeps holding no new alert is created; when it
-    stops holding the episode is marked cleared. Stale readings neither raise nor clear alerts.
-    """
+
+def raise_alert(db, rule, city, doc, unit, source, t):
+    """Create an alert for a newly breached rule; returns False if an identical one already exists"""
+    value = doc["values"][services.LIVE_VARIABLES[rule["variable"]][1]]
+    try:
+        db.alerts.insert_one({
+            "rule_id": rule["_id"], "rule_name": rule["name"], "city_id": city, "station_key": doc["station_key"],
+            "variable": rule["variable"], "operator": rule["operator"], "threshold": rule["threshold"],
+            "severity": rule["severity"], "value": value, "last_value": value, "unit": unit, "source": source,
+            "value_origin": doc["value_origin"], "observed_at": doc["observed_at"], "evaluated_at": t,
+            "last_seen_at": t, "status": "open", "station": (doc.get("provider") or {}).get("location_name")})
+        return True
+    except DuplicateKeyError:
+        return False
+
+
+def evaluate_station(db, rule, city, doc, unit, source, t, summary):
+    """Compare one reading with a rule: raise, update or clear the alert episode"""
+    value = doc["values"][services.LIVE_VARIABLES[rule["variable"]][1]]
+    open_episode = {"rule_id": rule["_id"], "city_id": city, "station_key": doc["station_key"],
+                    "status": {"$in": ["open", "acknowledged"]}}
+    current = db.alerts.find_one(open_episode)
+    breached = OPS[rule["operator"]](value, rule["threshold"])
+
+    if breached and current:
+        db.alerts.update_one({"_id": current["_id"]}, {"$set": {"last_value": value, "last_seen_at": t}})
+    elif breached:
+        summary["created"] += raise_alert(db, rule, city, doc, unit, source, t)
+    elif current:
+        db.alerts.update_one({"_id": current["_id"]}, {"$set": {"status": "cleared", "cleared_at": t, "last_value": value}})
+        summary["cleared"] += 1
+
+
+def evaluate_alerts(db):
+    """Evaluate enabled live-variable rules against each city's newest non-stale readings"""
     summary = {"rules_evaluated": 0, "created": 0, "cleared": 0, "stale_skipped": 0, "no_data": 0}
     t = now()
     for rule in db.alert_rules.find({"enabled": True}):
@@ -194,42 +238,21 @@ def evaluate_alerts(db):
             continue
         source, field, unit = live
         summary["rules_evaluated"] += 1
-        for city in (src.CITIES if rule["city_id"] == "all" else [rule["city_id"]]):
-            latest = list(db.latest_readings.aggregate([
-                {"$match": {"source": source, "city_id": city, f"values.{field}": {"$exists": True}}},
-                {"$sort": {"observed_at": -1}}, {"$group": {"_id": "$station_key", "doc": {"$first": "$$ROOT"}}}]))
-            if not latest:
+        cities = src.CITIES if rule["city_id"] == "all" else [rule["city_id"]]
+        for city in cities:
+            readings = latest_reading_per_station(db, source, city, field)
+            if not readings:
                 summary["no_data"] += 1
-            for item in latest:
-                doc = item["doc"]
+            for doc in readings:
                 if t - aware(doc["observed_at"]) > STALE_AFTER[source]:
                     summary["stale_skipped"] += 1
-                    continue
-                value = doc["values"][field]
-                episode = {"rule_id": rule["_id"], "city_id": city, "station_key": doc["station_key"], "status": {"$in": ["open", "acknowledged"]}}
-                current = db.alerts.find_one(episode)
-                if OPS[rule["operator"]](value, rule["threshold"]):
-                    if current:
-                        db.alerts.update_one({"_id": current["_id"]}, {"$set": {"last_value": value, "last_seen_at": t}})
-                        continue
-                    try:
-                        db.alerts.insert_one({
-                            "rule_id": rule["_id"], "rule_name": rule["name"], "city_id": city, "station_key": doc["station_key"],
-                            "variable": rule["variable"], "operator": rule["operator"], "threshold": rule["threshold"],
-                            "severity": rule["severity"], "value": value, "last_value": value, "unit": unit, "source": source,
-                            "value_origin": doc["value_origin"], "observed_at": doc["observed_at"], "evaluated_at": t,
-                            "last_seen_at": t, "status": "open", "station": (doc.get("provider") or {}).get("location_name")})
-                        summary["created"] += 1
-                    except DuplicateKeyError:
-                        pass
-                elif current:
-                    db.alerts.update_one({"_id": current["_id"]}, {"$set": {"status": "cleared", "cleared_at": t, "last_value": value}})
-                    summary["cleared"] += 1
-    db.ingest_status.update_one({"_id": "alert_evaluation"}, {"$set": {"last_attempt": t, "last_success": t, "summary": summary}}, upsert=True)
+                else:
+                    evaluate_station(db, rule, city, doc, unit, source, t, summary)
+    db.ingest_status.update_one({"_id": "alert_evaluation"},
+                                {"$set": {"last_attempt": t, "last_success": t, "summary": summary}}, upsert=True)
     return summary
 
 
-# ---------- freshness for the dashboard ----------
 def freshness(db):
     rows = []
     for source, label in SOURCE_LABELS.items():
@@ -248,7 +271,7 @@ def freshness(db):
 
 
 def latest_by_city(db):
-    """Latest weather and air-quality reading per city plus the active OpenAQ stations."""
+    """Latest weather and air-quality reading per city plus the active OpenAQ stations"""
     out = {}
     for city in src.CITIES:
         entry = {"weather": None, "air_quality": None, "openaq": []}
@@ -268,9 +291,8 @@ def latest_by_city(db):
     return out
 
 
-# ---------- background poller ----------
 class Poller(threading.Thread):
-    """Runs poll_cycle every `minutes` (OpenAQ every `openaq_minutes`) until stopped. Failures are logged, never fatal."""
+    """Runs poll_cycle every `minutes` (OpenAQ every `openaq_minutes`) until stopped. Failures are logged, never fatal"""
 
     def __init__(self, db, minutes=15, openaq_minutes=60):
         super().__init__(daemon=True, name="earthscape-poller")
@@ -292,7 +314,7 @@ class Poller(threading.Thread):
                 seal_raw(self.db)
             except (PyMongoError, OSError) as e:
                 log.error("poll cycle failed: %s", type(e).__name__)
-            except Exception as e:   # keep the thread alive
+            except Exception as e:
                 log.error("poll cycle error: %s", type(e).__name__)
             self.stop_event.wait(self.minutes * 60)
 

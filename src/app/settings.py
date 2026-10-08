@@ -1,4 +1,4 @@
-"""App configuration from environment variables (optionally the git-ignored .env). No secrets in code."""
+"""App configuration from environment variables (optionally the git-ignored .env). No secrets in code"""
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,11 +19,11 @@ def load_env_file(path=ROOT / ".env"):
 class Settings:
     mongo_uri: str = "mongodb://localhost:27017"
     mongo_db: str = "earthscape"
-    cookie_secure: bool = False   # set COOKIE_SECURE=1 behind TLS
+    cookie_secure: bool = False
     session_hours: int = 8
-    poll_enabled: bool = False        # background polling thread; POLL_ENABLED=1 (default when run from the environment)
+    poll_enabled: bool = False
     poll_minutes: int = 15
-    log_file: Path | None = None      # set from the environment for real runs; tests leave logging alone
+    log_file: Path | None = None
     openaq_minutes: int = 60
     cache_dir: Path = ROOT / "data" / "processed" / "app_cache"
 
@@ -31,8 +31,13 @@ class Settings:
     def from_env(cls):
         load_env_file()
         e = os.environ
-        return cls(mongo_uri=e.get("MONGODB_URI", cls.mongo_uri), mongo_db=e.get("MONGODB_DB", cls.mongo_db),
-                   cookie_secure=e.get("COOKIE_SECURE", "0") == "1",
-                   session_hours=int(e.get("SESSION_HOURS", cls.session_hours)),
-                   poll_enabled=e.get("POLL_ENABLED", "1") == "1", log_file=ROOT / "logs" / "earthscape.log", poll_minutes=int(e.get("POLL_MINUTES", cls.poll_minutes)),
-                   openaq_minutes=int(e.get("OPENAQ_MINUTES", cls.openaq_minutes)))
+        return cls(
+            mongo_uri=e.get("MONGODB_URI", cls.mongo_uri),
+            mongo_db=e.get("MONGODB_DB", cls.mongo_db),
+            cookie_secure=e.get("COOKIE_SECURE", "0") == "1",
+            session_hours=int(e.get("SESSION_HOURS", cls.session_hours)),
+            poll_enabled=e.get("POLL_ENABLED", "1") == "1",
+            poll_minutes=int(e.get("POLL_MINUTES", cls.poll_minutes)),
+            openaq_minutes=int(e.get("OPENAQ_MINUTES", cls.openaq_minutes)),
+            log_file=ROOT / "logs" / "earthscape.log",
+        )

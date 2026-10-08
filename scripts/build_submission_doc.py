@@ -1,10 +1,4 @@
-r"""Insert the redesigned dashboard screenshots and as-built notes into a COPY of the team's project document.
-
-Run: .venv\Scripts\python.exe scripts\build_submission_doc.py "C:\Users\AKL\Downloads\EarthScape Climate Agency.docx"
-The original is never modified. Output: submission/EarthScape Climate Agency - with dashboard.docx
-The new section is placed before the "Testing & Troubleshooting" heading, in the document's own fonts.
-After opening in Word: right-click the Table of Contents > Update Field > Update entire table.
-"""
+"""Insert the redesigned dashboard screenshots and as-built notes into a COPY of the team's project document"""
 import sys
 from pathlib import Path
 
@@ -127,7 +121,6 @@ def main(src):
     para("Other differences from the proposal that the team should know: near-real-time REST polling replaces event streaming; alerts are shown in the application (no e-mail or SMS); MODIS satellite data and weather-station records are not ingested; "
          "TLS and encryption at rest are prepared or documented but not active; there is no dataset upload page (data enter through the ingestion scripts); and a dedicated audit trail of logins, role changes and configuration changes is not implemented.", size=13)
 
-    # ask Word to refresh the table of contents on open
     settings = doc.settings.element
     uf = OxmlElement("w:updateFields")
     uf.set(qn("w:val"), "true")

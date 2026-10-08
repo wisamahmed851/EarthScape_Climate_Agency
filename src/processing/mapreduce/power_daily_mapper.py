@@ -1,12 +1,11 @@
-#!/usr/bin/env python3
-"""Hadoop Streaming mapper: POWER INTERIM hourly rows -> `city_id|date <tab> six climate values`."""
+"""Hadoop Streaming mapper: POWER INTERIM hourly rows -> `city_id|date <tab> six climate values`"""
 import sys
 
 HEADER_START = "timestamp_utc"
 
 
 def map_line(line):
-    """Return (key, value) for a data row, None for the header; a malformed row fails the job."""
+    """Return (key, value) for a data row, None for the header; a malformed row fails the job"""
     f = line.rstrip("\n").split(",")
     if f[0] == HEADER_START:
         return None

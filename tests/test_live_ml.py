@@ -15,13 +15,13 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "src" / "ml"))
 sys.path.insert(0, str(ROOT / "src" / "processing" / "mapreduce"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_app import AppTestCase, PW, MONGO  # noqa: E402
+from test_app import AppTestCase, PW, MONGO
 
-import climate_ml  # noqa: E402
-import power_yearly_mapper as ym  # noqa: E402
-import power_yearly_reducer as yr  # noqa: E402
-from app import analytics, live, manage, services  # noqa: E402
-from ingestion import live_sources as src, modis  # noqa: E402
+import climate_ml
+import power_yearly_mapper as ym
+import power_yearly_reducer as yr
+from app import analytics, live, manage, services
+from ingestion import live_sources as src, modis
 
 NOW = datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None)
 
@@ -66,7 +66,7 @@ class SourceParsingTest(unittest.TestCase):
 
     def test_openaq_keeps_only_pm25_with_metadata_and_never_invents(self):
         out = src.normalise_openaq("lahore", LOCATION, {"retrieved_at": "2026-10-08T10:00:00+00:00", "response": LATEST_JSON})
-        self.assertEqual(len(out), 1)                       # the temperature sensor is ignored
+        self.assertEqual(len(out), 1)
         r = out[0]
         self.assertEqual((r["value_origin"], r["values"], r["station_key"]), ("observed", {"pm25": 68.1}, "8664:25135"))
         self.assertEqual((r["provider"]["sensor_class"], r["provider"]["location_name"]), ("reference monitor", "Test Monitor"))
@@ -101,11 +101,11 @@ class LiveStorageAndAlertsTest(AppTestCase):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(live, "STAGING", Path(tmp)), mock.patch.object(src, "fetch_openmeteo", fake):
             stored, errors = live.poll_openmeteo(self.db, src.WEATHER)
             staged = [len(f.read_text().splitlines()) for f in Path(tmp).rglob("polls.jsonl")]
-        self.assertEqual(stored, 4)                          # lahore failed, the other four cities were stored
+        self.assertEqual(stored, 4)
         self.assertTrue(any("lahore" in e for e in errors))
         status = self.db.ingest_status.find_one({"_id": src.WEATHER})
         self.assertEqual(status["consecutive_failures"], 1)
-        self.assertEqual(staged, [4])   # raw envelopes of the 4 successful cities are preserved
+        self.assertEqual(staged, [4])
 
     def rule(self, **kw):
         base = {"name": "r", "city_id": "karachi", "variable": "openmeteo_weather_model:temperature_2m", "operator": ">",
@@ -115,10 +115,10 @@ class LiveStorageAndAlertsTest(AppTestCase):
     def test_threshold_alert_lifecycle_without_duplicates(self):
         self.rule()
         live.store_readings(self.db, [reading(src.WEATHER, "karachi", "temperature_2m", 30.0, age_min=30)])
-        self.assertEqual(live.evaluate_alerts(self.db)["created"], 0)             # below threshold: nothing invented
+        self.assertEqual(live.evaluate_alerts(self.db)["created"], 0)
         live.store_readings(self.db, [reading(src.WEATHER, "karachi", "temperature_2m", 41.0, age_min=10)])
         self.assertEqual(live.evaluate_alerts(self.db)["created"], 1)
-        self.assertEqual(live.evaluate_alerts(self.db)["created"], 0)             # same episode: no duplicate
+        self.assertEqual(live.evaluate_alerts(self.db)["created"], 0)
         live.store_readings(self.db, [reading(src.WEATHER, "karachi", "temperature_2m", 42.0, age_min=5)])
         live.evaluate_alerts(self.db)
         self.assertEqual(self.db.alerts.count_documents({}), 1)
@@ -129,7 +129,7 @@ class LiveStorageAndAlertsTest(AppTestCase):
         self.assertEqual(self.db.alerts.find_one()["status"], "cleared")
         live.store_readings(self.db, [reading(src.WEATHER, "karachi", "temperature_2m", 44.0, age_min=0)])
         live.evaluate_alerts(self.db)
-        self.assertEqual(self.db.alerts.count_documents({}), 2)                   # a new episode after clearing
+        self.assertEqual(self.db.alerts.count_documents({}), 2)
 
     def test_stale_readings_never_raise_or_clear_alerts(self):
         self.rule()
@@ -144,7 +144,7 @@ class LiveStorageAndAlertsTest(AppTestCase):
         for city in ("karachi", "lahore"):
             live.store_readings(self.db, [reading(src.WEATHER, city, "temperature_2m", 40.0)])
         s = live.evaluate_alerts(self.db)
-        self.assertEqual(s["created"], 2)                                         # only the enabled live rule, for both cities
+        self.assertEqual(s["created"], 2)
         self.assertEqual({a["city_id"] for a in self.db.alerts.find()}, {"karachi", "lahore"})
 
     def test_observed_pm25_alert_is_per_station_and_labelled_observed(self):
@@ -175,7 +175,7 @@ class LiveStorageAndAlertsTest(AppTestCase):
         a = self.db.alerts.find_one()
         self.assertEqual((a["status"], a["acknowledged_by"]), ("acknowledged", "analyst"))
         self.assertNotIn("badge bg-danger", b.get("/overview").text)
-        self.post(b, f"/alerts/history/{alert['_id']}/ack", "/alerts/history")   # already acknowledged: rejected politely
+        self.post(b, f"/alerts/history/{alert['_id']}/ack", "/alerts/history")
         self.assertIn("not found or not open", b.get("/alerts/history").text)
         self.assertEqual(self.http.post(f"/alerts/history/{alert['_id']}/ack", data={}).status_code, 303)
 
@@ -193,7 +193,7 @@ class LiveStorageAndAlertsTest(AppTestCase):
         html = a.get("/current").text
         self.assertIn("Near-real-time <strong>REST polling</strong>", html)
         self.assertIn("30.5", html)
-        self.assertIn("STALE", html)                                              # the 7000-minute-old OpenAQ reading
+        self.assertIn("STALE", html)
         j = a.get("/api/current").json()
         self.assertIn("modelled", j["note"])
         self.assertEqual(j["cities"]["karachi"]["weather"]["values"]["temperature_2m"], 30.5)
@@ -251,7 +251,7 @@ class SealRawTest(unittest.TestCase):
 
 
 def synthetic_cache(path):
-    """Synthetic multi-year series, used ONLY to test the ML code paths (never shown to users)."""
+    """Synthetic multi-year series, used ONLY to test the ML code paths (never shown to users)"""
     rng = np.random.default_rng(0)
     days = pd.date_range("2001-01-01", "2025-12-31", freq="D")
     rows = []
@@ -328,7 +328,7 @@ class ClimateMlTest(unittest.TestCase):
 
     def test_trend_recovers_the_synthetic_warming(self):
         t = self.res["trend"]["karachi"]["temperature"]
-        self.assertAlmostEqual(t["slope_per_decade"], 0.3, delta=0.15)           # synthetic data warms 0.03 C/yr
+        self.assertAlmostEqual(t["slope_per_decade"], 0.3, delta=0.15)
         self.assertTrue(t["significant_at_5pct"])
         self.assertEqual(t["n_years"], 25)
 
@@ -346,7 +346,7 @@ class ClimateMlTest(unittest.TestCase):
         c = self.res["correlation"]["karachi"]
         p = np.array(c["pearson"])
         self.assertTrue(np.allclose(p, p.T) and np.allclose(np.diag(p), 1))
-        self.assertLess(p[c["variables"].index("temperature"), c["variables"].index("humidity")], -0.05)   # built into the synthetic data
+        self.assertLess(p[c["variables"].index("temperature"), c["variables"].index("humidity")], -0.05)
 
     def test_missing_months_are_skipped_not_filled(self):
         _, m = climate_ml.load(self.tmp.name)
@@ -428,8 +428,8 @@ class YearlyReducerTest(unittest.TestCase):
                  self.day("2001-01-03", precip="1.0"), self.day("2001-01-04", precip="0.9"), self.day("2001-01-05", precip="")]
         [row] = self.run_year(lines)
         self.assertEqual(row[:4], ["karachi", "2001", "5", "120"])
-        self.assertEqual(row[7], "")                                        # incomplete year: no annual total
-        self.assertEqual(row[8:], ["25.0", "4", "3", "2", "1", "1", "1"])   # max, days w/ total, wet, >=10, >=20, hot, frost
+        self.assertEqual(row[7], "")
+        self.assertEqual(row[8:], ["25.0", "4", "3", "2", "1", "1", "1"])
 
     def test_full_leap_year_total_and_weighting(self):
         import datetime as dt
@@ -492,15 +492,15 @@ class BackupRestoreTest(AppTestCase):
             self.assertEqual(meta["files"]["users.json"]["documents"], 2)
             self.assertNotIn("sessions.json", meta["files"])
             users_before = self.db.users.count_documents({})
-            with self.assertRaises(SystemExit):                                  # non-empty collections are protected
+            with self.assertRaises(SystemExit):
                 manage.restore(self.db, out, replace=False)
             self.db.users.delete_many({})
             self.db.feedback.delete_many({})
             manage.restore(self.db, out, replace=True)
             self.assertEqual(self.db.users.count_documents({}), users_before)
             self.assertEqual(self.db.feedback.find_one()["subject"], "s")
-            self.assertEqual(self.login("admin")[1].status_code, 303)           # restored password hash still works
-            (out / "feedback.json").write_text("[]")                              # tamper
+            self.assertEqual(self.login("admin")[1].status_code, 303)
+            (out / "feedback.json").write_text("[]")
             with self.assertRaises(SystemExit):
                 manage.restore(self.db, out, replace=True)
 

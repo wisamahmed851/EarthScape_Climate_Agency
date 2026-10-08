@@ -1,9 +1,4 @@
-"""Local health check: application, MongoDB, HDFS, live-source polling freshness and the newest backup.
-
-Each run appends one JSON line (UTC timestamp, per-check result, failed checks) to logs/health.jsonl and returns it.
-It checks and records only: it never restarts, repairs or notifies anything. Run by `manage.py health-check`,
-normally from Windows Task Scheduler (docs/security-and-reliability.md).
-"""
+"""Local health check: application, MongoDB, HDFS, live-source polling freshness and the newest backup"""
 import hashlib
 import json
 import os
@@ -22,8 +17,8 @@ from . import data, live
 from .settings import ROOT
 
 LOG = ROOT / "logs" / "health.jsonl"
-LOG_KEEP = 2000                       # lines; older ones are dropped so the file stays small
-BACKUP_MAX_AGE = timedelta(hours=36)  # a daily backup that is more than a day and a half old counts as missing
+LOG_KEEP = 2000
+BACKUP_MAX_AGE = timedelta(hours=36)
 BACKUP_DIR = re.compile(r"^earthscape_\d{8}T\d{6}Z$")
 
 
@@ -84,20 +79,32 @@ def check_disk(path=ROOT, min_free_gb=5):
     return free >= min_free_gb, f"{free:.1f} GB free on the project drive (alert below {min_free_gb} GB)"
 
 
-def check_resources(max_cpu=95, max_memory=95):
-    """System CPU (1 s sample) and memory use, plus the memory of the app and database processes. Recorded; flagged only when extreme."""
-    cpu, mem = psutil.cpu_percent(interval=1), psutil.virtual_memory()
-    procs = {}
+def process_memory():
+    """Resident memory in bytes of the EarthScape web app and of mongod"""
+    totals = {}
     for p in psutil.process_iter(["name", "cmdline", "memory_info"]):
         try:
-            cmd = " ".join(p.info["cmdline"] or [])
-            key = "app" if "uvicorn" in cmd and "app.main" in cmd else "mongod" if p.info["name"] == "mongod.exe" else None
-            if key:
-                procs[key] = procs.get(key, 0) + p.info["memory_info"].rss
+            command = " ".join(p.info["cmdline"] or [])
+            if "uvicorn" in command and "app.main" in command:
+                name = "app"
+            elif p.info["name"] == "mongod.exe":
+                name = "mongod"
+            else:
+                continue
+            totals[name] = totals.get(name, 0) + p.info["memory_info"].rss
         except (psutil.Error, OSError):
             pass
-    detail = f"CPU {cpu:.0f}%, memory {mem.percent:.0f}% of {mem.total / 2**30:.1f} GiB" + "".join(f", {k} {v / 2**20:.0f} MiB" for k, v in sorted(procs.items()))
-    return cpu < max_cpu and mem.percent < max_memory, detail, {"cpu_percent": cpu, "memory_percent": mem.percent, "process_rss_mib": {k: round(v / 2**20) for k, v in procs.items()}}
+    return totals
+
+
+def check_resources(max_cpu=95, max_memory=95):
+    """System CPU (1 s sample) and memory use, plus the memory of the app and database processes. Recorded; flagged only when extreme"""
+    cpu, mem = psutil.cpu_percent(interval=1), psutil.virtual_memory()
+    process_mib = {name: round(rss / 2**20) for name, rss in process_memory().items()}
+    detail = f"CPU {cpu:.0f}%, memory {mem.percent:.0f}% of {mem.total / 2**30:.1f} GiB"
+    detail += "".join(f", {name} {mib} MiB" for name, mib in sorted(process_mib.items()))
+    metrics = {"cpu_percent": cpu, "memory_percent": mem.percent, "process_rss_mib": process_mib}
+    return cpu < max_cpu and mem.percent < max_memory, detail, metrics
 
 
 def run(settings, url="http://127.0.0.1:8000", backup_root=ROOT / "backups", log_path=LOG, now=None):

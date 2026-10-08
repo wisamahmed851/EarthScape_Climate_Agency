@@ -1,10 +1,4 @@
-"""NASA POWER hourly point ingestion.
-
-API -> local staging -> validation -> sha256 -> HDFS raw -> manifest -> staging cleanup.
-Design: docs/data-architecture.md. Raw bytes are stored exactly as the provider sent them.
-
-Run: python src/ingestion/nasa_power.py --city karachi --start 2001-01-01 --end 2001-12-31
-"""
+"""NASA POWER hourly point ingestion"""
 import argparse
 import hashlib
 import json
@@ -33,7 +27,6 @@ class IngestError(Exception):
 
 
 def build_url(lat, lon, start, end, variables):
-    # UTC so the series aligns with the other sources; end date is inclusive in the API.
     query = urllib.parse.urlencode({
         "parameters": ",".join(variables), "community": "AG",
         "longitude": lon, "latitude": lat,
@@ -52,7 +45,7 @@ def raw_path(city, start, end):
 
 
 def download(url):
-    """Return (body, provider version, attempts); bounded retries on timeouts, 429 and 5xx."""
+    """Return (body, provider version, attempts); bounded retries on timeouts, 429 and 5xx"""
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
             with urllib.request.urlopen(url, timeout=120) as r:
@@ -70,7 +63,7 @@ def download(url):
 
 
 def validate(text, lat, lon, start, end, variables):
-    """Check the response is a complete NASA POWER hourly CSV for the request. Returns (rows, -999 cells)."""
+    """Check the response is a complete NASA POWER hourly CSV for the request. Returns (rows, -999 cells)"""
     lines = text.splitlines()
     if not lines or lines[0].strip() != "-BEGIN HEADER-":
         raise IngestError("not a POWER CSV (no header block); first bytes: " + text[:120])
@@ -156,7 +149,7 @@ def hdfs_sha256(path):
 
 
 def last_record(manifest_text, key):
-    """Last manifest line for object_key wins."""
+    """Last manifest line for object_key wins"""
     found = None
     for line in manifest_text.splitlines():
         if line.strip():
@@ -210,7 +203,6 @@ def ingest(city, lat, lon, start, end, variables, staging_dir):
         record["size_bytes"], record["sha256"] = staged.stat().st_size, sha256_of(staged)
 
         if hdfs_exists(final):
-            # Never overwrite raw: only adopt an identical object left by an interrupted run.
             if hdfs_sha256(final) != record["sha256"]:
                 raise IngestError(f"{final} exists with different content; refusing to overwrite")
             outcome = "adopted existing identical object"

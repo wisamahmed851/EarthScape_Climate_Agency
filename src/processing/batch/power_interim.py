@@ -1,10 +1,4 @@
-"""NASA POWER RAW -> INTERIM for one city (all years 2001..2025).
-
-RAW HDFS -> verify manifest + sha256 -> transform -> validate -> local staging -> HDFS _tmp -> verify -> mv -> manifest.
-Contract: docs/data-architecture.md ("POWER RAW to INTERIM contract"). RAW is only read.
-
-Run: python src/processing/batch/power_interim.py --city karachi
-"""
+"""NASA POWER RAW -> INTERIM for one city (all years 2001..2025)"""
 import argparse
 import hashlib
 import json
@@ -15,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "src" / "ingestion"))
-import nasa_power as raw  # noqa: E402
+import nasa_power as raw
 
 SOURCE = "power_hourly_interim"
 VERSION = "power_interim_v1"
@@ -38,7 +32,7 @@ NOTES = {
 
 
 def parse_raw(text):
-    """Return (header info, data rows as string lists) of one POWER RAW CSV."""
+    """Return (header info, data rows as string lists) of one POWER RAW CSV"""
     lines = text.splitlines()
     end = next(i for i, l in enumerate(lines) if l.strip() == "-END HEADER-")
     header = "\n".join(lines[:end])
@@ -56,7 +50,7 @@ def parse_raw(text):
 
 
 def convert_row(f, city):
-    """One RAW row (strings) -> INTERIM row (strings). Only -999 changes: it becomes empty and is named."""
+    """One RAW row (strings) -> INTERIM row (strings). Only -999 changes: it becomes empty and is named"""
     y, mo, d, h = (int(x) for x in f[:4])
     values, missing = [], []
     for name, v in zip(VALUE_FIELDS, f[4:]):
@@ -69,7 +63,7 @@ def convert_row(f, city):
 
 
 def validate_output(text, raw_rows, city):
-    """Check the finished CSV against the RAW rows. Returns (rows, empty climate cells, first, last)."""
+    """Check the finished CSV against the RAW rows. Returns (rows, empty climate cells, first, last)"""
     lines = text.split("\n")
     if lines.pop() != "" or lines[0] != HEADER:
         raise raw.IngestError("output must be LF-terminated with the approved header")
@@ -92,13 +86,13 @@ def validate_output(text, raw_rows, city):
 
 
 def is_current(prior, inputs):
-    """True when an ok interim record was made by this version from exactly these RAW inputs."""
+    """True when an ok interim record was made by this version from exactly these RAW inputs"""
     return bool(prior) and prior["status"] == "ok" and prior["transform_version"] == VERSION \
         and prior["inputs"] == inputs
 
 
 def read_inputs(city, lat, lon, manifest_text):
-    """Verify every RAW object (manifest ok, path, size, sha256, header, rows). Returns (inputs, raw_rows, header info)."""
+    """Verify every RAW object (manifest ok, path, size, sha256, header, rows). Returns (inputs, raw_rows, header info)"""
     inputs, rows, first = [], [], None
     for year in YEARS:
         start, end = date(year, 1, 1), date(year, 12, 31)
@@ -169,7 +163,6 @@ def transform(city, staging_dir):
         record["size_bytes"], record["sha256"] = staged.stat().st_size, raw.sha256_of(staged)
 
         if raw.hdfs_exists(final):
-            # Never overwrite: only adopt an identical object left by an interrupted run.
             if raw.hdfs_sha256(final) != record["sha256"]:
                 raise raw.IngestError(f"{final} exists with different content; refusing to overwrite")
             outcome = "adopted existing identical object"

@@ -1,10 +1,4 @@
-#!/usr/bin/env python3
-"""Hadoop Streaming reducer: all hourly values of one city-day -> one 17-field daily row (power_daily_v1).
-
-Exact Decimal sums (shuffle order is not fixed); means rounded half-up to 4 decimals; empty hourly values are
-excluded and counted, never zero. Precipitation total is empty unless all 24 hours are valid. Single reducer only
-(it writes the header).
-"""
+"""Hadoop Streaming reducer: all hourly values of one city-day -> one 17-field daily row (power_daily_v1)"""
 import sys
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -22,7 +16,7 @@ def mean(v):
 
 
 def reduce_day(key, rows):
-    """rows: list of six-item lists of hourly value text (empty = missing). Returns the daily CSV row."""
+    """rows: list of six-item lists of hourly value text (empty = missing). Returns the daily CSV row"""
     city, day = key.split("|")
     n = len(rows)
     v = [[Decimal(x) for x in col if x != ""] for col in zip(*rows)]

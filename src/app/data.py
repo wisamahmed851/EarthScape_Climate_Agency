@@ -1,9 +1,4 @@
-"""Read-only access to the verified POWER PROCESSED daily/monthly outputs.
-
-refresh() copies the two HDFS part files into a bounded local cache (2 files) only after checking them against their
-provenance manifest records (sha256, size, rows, header, daily->monthly lineage). Requests are served from memory
-loaded from that cache; HDFS is never touched per request. Nothing in HDFS is written.
-"""
+"""Read-only access to the verified POWER PROCESSED daily/monthly outputs"""
 import bisect
 import csv
 import hashlib
@@ -30,7 +25,7 @@ YEARLY_HEADER = ("city_id,year,days_observed,hours_observed,temperature_2m_mean_
                  "precipitation_total_mm,max_daily_precipitation_mm,days_with_precip_total,wet_days_ge_1mm,"
                  "heavy_precip_days_ge_10mm,very_heavy_precip_days_ge_20mm,hot_days_max_ge_35c,frost_days_min_lt_0c")
 HEADERS = {"daily": DAILY_HEADER, "monthly": MONTHLY_HEADER, "yearly": YEARLY_HEADER}
-OPTIONAL = {"yearly": "power_yearly"}   # extreme-event job; the app works without it until it has run
+OPTIONAL = {"yearly": "power_yearly"}
 VALUE_COLS = {
     "daily": ["hours_observed", "temperature_2m_mean_c", "temperature_2m_min_c", "temperature_2m_max_c",
               "relative_humidity_2m_mean_pct", "precipitation_total_mm", "wind_speed_2m_mean_m_s",
@@ -46,7 +41,7 @@ CITY_NAMES = {"karachi": "Karachi", "lahore": "Lahore", "islamabad": "Islamabad"
 MANIFESTS = ["power_hourly_gridded", "power_hourly_interim", "power_daily", "power_monthly", "power_yearly"]
 
 
-NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # background callers (server, scheduled tasks) must not flash a console per wsl call
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
 class DataError(Exception):
@@ -75,7 +70,7 @@ def last_ok(manifest_text, key):
 
 
 def manifest_summary(text):
-    """Latest record per object_key: how many are ok and the latest timestamp."""
+    """Latest record per object_key: how many are ok and the latest timestamp"""
     last = {}
     for line in text.splitlines():
         if line.strip():
@@ -88,7 +83,7 @@ def manifest_summary(text):
 
 
 def refresh(cache_dir):
-    """Validate the PROCESSED outputs against their manifests and replace the local cache. Raises DataError."""
+    """Validate the PROCESSED outputs against their manifests and replace the local cache. Raises DataError"""
     cache_dir = Path(cache_dir)
     texts, records, manifests = {}, {}, {}
     for kind, name in {**SOURCES, **OPTIONAL}.items():
@@ -140,7 +135,7 @@ def num(x):
 
 
 class Store:
-    """In-memory columns per city, loaded from the verified cache."""
+    """In-memory columns per city, loaded from the verified cache"""
 
     def __init__(self, cache_dir):
         self.cache_dir = Path(cache_dir)
@@ -190,7 +185,7 @@ class Store:
         return [c for c in CITY_NAMES if c in self.tables.get("daily", {})]
 
     def window(self, kind, city, start, end):
-        """Columns of one city between two keys (inclusive; ISO strings compare chronologically)."""
+        """Columns of one city between two keys (inclusive; ISO strings compare chronologically)"""
         t = self.tables[kind][city]
         lo, hi = bisect.bisect_left(t["keys"], start), bisect.bisect_right(t["keys"], end)
         return {k: v[lo:hi] for k, v in t.items()}
@@ -219,7 +214,7 @@ class Store:
         }
 
     def compare(self, start_year, end_year):
-        """Yearly series per city from the monthly output (hour-weighted means; precipitation only for complete years)."""
+        """Yearly series per city from the monthly output (hour-weighted means; precipitation only for complete years)"""
         out = {}
         for city, m in self.tables["monthly"].items():
             years = {}
@@ -244,7 +239,7 @@ class Store:
         return out
 
     def extremes(self):
-        """Yearly extreme-event rows (from the MapReduce yearly job) or None when that job's output is not cached."""
+        """Yearly extreme-event rows (from the MapReduce yearly job) or None when that job's output is not cached"""
         y = self.tables.get("yearly")
         if not y:
             return None

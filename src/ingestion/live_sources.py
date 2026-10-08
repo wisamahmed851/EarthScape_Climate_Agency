@@ -1,12 +1,4 @@
-"""Fetch and normalise the current-data providers. No storage here (see src/app/live.py).
-
-  openmeteo_weather_model  Open-Meteo forecast API `current=`  -> modelled, near-real-time
-  openmeteo_airquality_model Open-Meteo Air Quality `current=` -> modelled (CAMS), never observed
-  openaq_observed          OpenAQ v3 PM2.5 at active monitoring locations within 25 km -> observed (reference or low-cost)
-
-This is REST polling (near-real-time), not continuous event streaming. The OpenAQ key is read from OPENAQ_API_KEY and
-is only ever sent in the X-API-Key header; it is never logged or stored.
-"""
+"""Fetch and normalise the current-data providers. No storage here (see src/app/live.py)"""
 import json
 import math
 import os
@@ -27,8 +19,8 @@ AQ_VARS = ["pm2_5", "pm10", "carbon_monoxide", "nitrogen_dioxide", "sulphur_diox
 URLS = {WEATHER: "https://api.open-meteo.com/v1/forecast", AIRQUALITY: "https://air-quality-api.open-meteo.com/v1/air-quality"}
 OPENAQ_URL = "https://api.openaq.org/v3"
 OPENAQ_RADIUS_M = 25000
-OPENAQ_ACTIVE_DAYS = 7           # a location counts as active if its last measurement is this recent
-OPENAQ_MAX_LOCATIONS = 20        # per city and cycle (rate limit: 60 requests/minute)
+OPENAQ_ACTIVE_DAYS = 7
+OPENAQ_MAX_LOCATIONS = 20
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
 
@@ -41,7 +33,7 @@ def now():
 
 
 def get_json(url, headers=None, attempts=4, pause=1.0):
-    """GET with bounded retries on timeouts, connection errors, 429 and 5xx. Returns parsed JSON."""
+    """GET with bounded retries on timeouts, connection errors, 429 and 5xx. Returns parsed JSON"""
     last = None
     for n in range(attempts):
         try:
@@ -61,11 +53,10 @@ def get_json(url, headers=None, attempts=4, pause=1.0):
 
 
 def iso(ts):
-    """Provider timestamps are UTC ('timezone=GMT' requested, OpenAQ gives Z); returns aware datetime."""
+    """Provider timestamps are UTC ('timezone=GMT' requested, OpenAQ gives Z); returns aware datetime"""
     return datetime.fromisoformat(ts.replace("Z", "+00:00")).replace(tzinfo=timezone.utc)
 
 
-# ---------- Open-Meteo (weather and air quality) ----------
 def fetch_openmeteo(source, city):
     c = CITIES[city]
     variables = WEATHER_VARS if source == WEATHER else AQ_VARS
@@ -89,7 +80,6 @@ def normalise_openmeteo(source, city, envelope):
                          "model_note": "weather-model output" if source == WEATHER else "CAMS atmospheric-composition model output"}}
 
 
-# ---------- OpenAQ ----------
 def km(lat1, lon1, lat2, lon2):
     p = math.pi / 180
     a = math.sin((lat2 - lat1) * p / 2) ** 2 + math.cos(lat1 * p) * math.cos(lat2 * p) * math.sin((lon2 - lon1) * p / 2) ** 2
@@ -104,7 +94,7 @@ def openaq_headers():
 
 
 def fetch_openaq(city, throttle=1.1):
-    """Return (envelopes, readings): raw provider responses and normalised PM2.5 readings for active locations."""
+    """Return (envelopes, readings): raw provider responses and normalised PM2.5 readings for active locations"""
     c = CITIES[city]
     headers = openaq_headers()
     query = urllib.parse.urlencode({"coordinates": f"{c['latitude']},{c['longitude']}", "radius": OPENAQ_RADIUS_M,
@@ -130,7 +120,7 @@ def fetch_openaq(city, throttle=1.1):
 
 
 def normalise_openaq(city, loc, envelope):
-    """PM2.5 readings only, from sensors the location catalogue says measure pm25. Nothing is inferred or filled."""
+    """PM2.5 readings only, from sensors the location catalogue says measure pm25. Nothing is inferred or filled"""
     c = CITIES[city]
     pm25 = {s["id"]: s for s in loc["sensors"] if s["parameter"]["name"] == "pm25"}
     dist = km(c["latitude"], c["longitude"], loc["coordinates"]["latitude"], loc["coordinates"]["longitude"])

@@ -11,13 +11,13 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from fastapi.testclient import TestClient  # noqa: E402
-from pymongo import MongoClient  # noqa: E402
-from pymongo.errors import PyMongoError  # noqa: E402
+from fastapi.testclient import TestClient
+from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 
-from app import data, db as dbmod, security, services  # noqa: E402
-from app.main import create_app  # noqa: E402
-from app.settings import Settings  # noqa: E402
+from app import data, db as dbmod, security, services
+from app.main import create_app
+from app.settings import Settings
 
 PW = "correct-horse-battery"
 try:
@@ -30,7 +30,7 @@ except PyMongoError:
 
 
 def fixture_files():
-    """Small synthetic PROCESSED-style files for tests only (never shown by the real app)."""
+    """Small synthetic PROCESSED-style files for tests only (never shown by the real app)"""
     daily = [data.DAILY_HEADER]
     for city in ("karachi", "lahore"):
         for i in range(40):
@@ -66,7 +66,7 @@ class PasswordTest(unittest.TestCase):
         self.assertTrue(security.verify_password(h, PW))
         self.assertFalse(security.verify_password(h, PW + "x"))
         self.assertFalse(security.verify_password("not-a-hash", PW))
-        self.assertNotEqual(h, security.hash_password(PW))   # salted
+        self.assertNotEqual(h, security.hash_password(PW))
 
     def test_policy(self):
         for bad in ("short", "x" * 129, None, "adminadminadmin"):
@@ -108,12 +108,11 @@ class AppTestCase(unittest.TestCase):
         self.settings = Settings(mongo_db=self.dbname, cache_dir=self.cache)
         self.app = create_app(self.settings, db=self.db, store=data.Store(self.cache))
         self.http = TestClient(self.app, follow_redirects=False, raise_server_exceptions=False)
-        self.http.__enter__()   # runs startup (indexes)
+        self.http.__enter__()
         self.addCleanup(self.http.__exit__, None, None, None)
         services.create_user(self.db, "admin", PW, "Administrator")
         services.create_user(self.db, "analyst", PW, "Analyst")
 
-    # helpers
     def csrf(self, client, path):
         html = client.get(path).text
         return re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
@@ -151,7 +150,7 @@ class AuthTest(AppTestCase):
         token = client.cookies.get("earthscape_session")
         session = self.db.sessions.find_one({"_id": security.token_hash(token)})
         self.assertTrue(session and session["user_id"])
-        self.assertIsNone(self.db.sessions.find_one({"_id": token}))   # token itself is not stored
+        self.assertIsNone(self.db.sessions.find_one({"_id": token}))
         self.assertEqual(client.get("/overview").status_code, 200)
 
     def test_login_failures_are_generic(self):
@@ -242,9 +241,9 @@ class RbacUserTest(AppTestCase):
 
     def test_create_user_validation(self):
         a = self.admin()
-        for fields in ({"username": "admin", "password": PW, "role": "Analyst"},         # duplicate
-                       {"username": "ok_user", "password": "short", "role": "Analyst"},    # weak
-                       {"username": "ok_user", "password": PW, "role": "Root"},           # unknown role
+        for fields in ({"username": "admin", "password": PW, "role": "Analyst"},
+                       {"username": "ok_user", "password": "short", "role": "Analyst"},
+                       {"username": "ok_user", "password": PW, "role": "Root"},
                        {"username": "bad name", "password": PW, "role": "Analyst"}):
             self.post(a, "/admin/users", "/admin/users", **fields)
             self.assertIn("alert-danger", a.get("/admin/users").text)
@@ -257,7 +256,7 @@ class RbacUserTest(AppTestCase):
         self.post(a, f"/admin/users/{analyst['_id']}/role", "/admin/users", role="Administrator")
         self.assertEqual(self.db.users.find_one({"_id": analyst["_id"]})["role"], "Administrator")
         self.post(a, f"/admin/users/{analyst['_id']}/role", "/admin/users", role="Analyst")
-        self.post(a, f"/admin/users/{admin['_id']}/role", "/admin/users", role="Analyst")      # last admin
+        self.post(a, f"/admin/users/{admin['_id']}/role", "/admin/users", role="Analyst")
         self.post(a, f"/admin/users/{admin['_id']}/active", "/admin/users", active="0")
         stored = self.db.users.find_one({"_id": admin["_id"]})
         self.assertEqual((stored["role"], stored["active"]), ("Administrator", True))
@@ -383,7 +382,7 @@ class DataTest(AppTestCase):
         self.assertEqual(store.cities(), ["karachi", "lahore"])
         w = store.window("daily", "karachi", "2001-01-05", "2001-01-08")
         self.assertEqual(w["keys"], ["2001-01-05", "2001-01-06", "2001-01-07", "2001-01-08"])
-        self.assertIsNone(store.window("daily", "karachi", "2001-01-04", "2001-01-04")["precipitation_total_mm"][0])   # missing stays None
+        self.assertIsNone(store.window("daily", "karachi", "2001-01-04", "2001-01-04")["precipitation_total_mm"][0])
 
     def test_missing_or_tampered_cache_is_reported_not_fatal(self):
         empty = data.Store(Path(self.tmp.name) / "nothing")

@@ -4,13 +4,13 @@ from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "ingestion"))
-import nasa_power as np_  # noqa: E402
+import nasa_power as np_
 
 VARS = ["T2M", "RH2M"]
 
 
 def make_csv(start=date(2001, 1, 1), end=date(2001, 1, 2), lat=24.8608, lon=67.0104, drop_row=None, cols=None):
-    """Synthetic test fixture in the POWER CSV layout (not data)."""
+    """Synthetic test fixture in the POWER CSV layout (not data)"""
     from datetime import datetime, timedelta
     head = [
         "-BEGIN HEADER-", "NASA/POWER Source Native Resolution Hourly Data ",

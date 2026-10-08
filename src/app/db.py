@@ -1,4 +1,4 @@
-"""MongoDB connection and indexes. Holds users, sessions, feedback, alert rules/alerts, current readings, ingest status and ML results (not the historical dataset)."""
+"""MongoDB connection and indexes for the application data"""
 from pymongo import ASCENDING, DESCENDING, MongoClient
 
 
@@ -14,7 +14,6 @@ def ensure_indexes(db):
     db.feedback.create_index("status")
     db.alert_rules.create_index("name", unique=True)
     db.alert_rules.create_index([("enabled", ASCENDING), ("variable", ASCENDING)])
-    # Current readings: unique per source/city/station/observed time (duplicate polls are not stored twice); 30-day TTL.
     db.latest_readings.create_index([("city_id", ASCENDING), ("source", ASCENDING), ("observed_at", DESCENDING)])
     db.latest_readings.create_index([("source", ASCENDING), ("city_id", ASCENDING), ("station_key", ASCENDING), ("observed_at", ASCENDING)],
                                     unique=True, name="uniq_reading")

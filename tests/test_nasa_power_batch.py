@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "ingestion"))
-import nasa_power_batch as b  # noqa: E402
+import nasa_power_batch as b
 
 CITIES = ["karachi", "lahore", "islamabad", "peshawar", "quetta"]
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -42,7 +42,7 @@ class BatchTests(unittest.TestCase):
         self.assertEqual((s["ingested"], s["skipped"], s["failed"], s["not_attempted"]), (3, 1, 1, 0))
         self.assertEqual(s["failures"], [{"city": "karachi", "year": 2003, "reason": "HTTP 422"}])
         self.assertEqual(s["max_attempts_seen"], 2)
-        self.assertEqual(len(slept), 3)  # delay only after real downloads, not skips or failures
+        self.assertEqual(len(slept), 3)
 
     def test_aborts_after_consecutive_failures(self):
         def always_fail(city, year):

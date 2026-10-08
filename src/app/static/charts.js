@@ -39,7 +39,6 @@ function showError(msg) {
   if (el) { el.textContent = msg; el.classList.remove("d-none"); }
 }
 
-// Align several {labels, values} series on one sorted label axis (missing = null).
 function merge(seriesList) {
   const labels = [...new Set(seriesList.flatMap((s) => s.labels))].sort();
   return { labels, aligned: seriesList.map((s) => { const m = new Map(s.labels.map((l, i) => [l, s.values[i]])); return labels.map((l) => (m.has(l) ? m.get(l) : null)); }) };

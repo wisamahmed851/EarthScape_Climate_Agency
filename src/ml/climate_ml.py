@@ -1,14 +1,4 @@
-"""Climate analytics on the verified POWER PROCESSED daily/monthly data (reanalysis-derived, not station observations).
-
-Four analyses, all chronological and reproducible (seed 42):
-  trend       Theil-Sen slope + Mann-Kendall test on annual values (2001-2025)
-  anomalies   daily temperature vs a day-of-year climatology fitted on 2001-2015 only; robust z-score (> 3.5) and an
-              Isolation Forest fitted on the same training years; both applied to 2016-2025
-  correlation Pearson/Spearman between deseasonalised daily anomalies (descriptive; association, not causation)
-  forecast    monthly means, train 2001-2020 / test 2021-2025; seasonal-climatology and last-year baselines vs a
-              harmonic + linear-trend Ridge; the forward model is picked by rolling-origin validation (2011-2020) INSIDE the training years
-Run: python src/app/manage.py train-ml
-"""
+"""Climate analytics on the verified POWER PROCESSED daily/monthly data (reanalysis-derived, not station observations)"""
 import json
 import math
 from datetime import datetime, timezone
@@ -25,7 +15,7 @@ VERSION = "climate_ml_v1"
 SEED = 42
 TRAIN_END_YEAR, ANOM_TRAIN_END = 2020, 2015
 Z_LIMIT = 3.5
-VARS = {  # label -> (daily column, monthly column, unit)
+VARS = {
     "temperature": ("temperature_2m_mean_c", "temperature_2m_mean_c", "C"),
     "humidity": ("relative_humidity_2m_mean_pct", "relative_humidity_2m_mean_pct", "%"),
     "precipitation": ("precipitation_total_mm", "precipitation_total_mm", "mm/month"),
@@ -46,7 +36,6 @@ def clean(x):
     return None if x is None or (isinstance(x, float) and not math.isfinite(x)) else float(x)
 
 
-# ---------- trend ----------
 def trends(m):
     out = {}
     for city, g in m.groupby("city_id"):
@@ -69,9 +58,8 @@ def trends(m):
     return out
 
 
-# ---------- anomalies ----------
 def climatology(train):
-    """Smoothed (15-day circular) day-of-year median of the training series."""
+    """Smoothed (15-day circular) day-of-year median of the training series"""
     doy = np.minimum(train.index.dayofyear, 365)
     med = train.groupby(doy).median().reindex(range(1, 366)).interpolate().values
     ext = np.r_[med[-7:], med, med[:7]]
@@ -120,13 +108,12 @@ def anomalies(d):
     return out
 
 
-# ---------- correlation ----------
 def correlation(d):
     out = {}
     for city, g in d.groupby("city_id"):
         g = g.set_index("date").sort_index()
         an = pd.DataFrame({k: deseason(g[c].dropna(), climatology(g[c].dropna())) for k, c in CORR_COLS.items() if k != "precipitation"})
-        an["precipitation"] = g["precipitation_total_mm"]   # skewed and non-seasonal in mean: used as is (Spearman is rank-based)
+        an["precipitation"] = g["precipitation_total_mm"]
         an = an.dropna()
         names = list(an.columns)
         out[city] = {"variables": names, "n_days": int(len(an)),
@@ -134,7 +121,6 @@ def correlation(d):
     return out
 
 
-# ---------- forecast ----------
 def design(periods, t0):
     t = np.array([(p.year - t0.year) * 12 + (p.month - t0.month) for p in periods], dtype=float)
     month = np.array([p.month for p in periods])
@@ -173,8 +159,7 @@ MODELS = {"seasonal_climatology": climatology_model, "last_year_repeat": last_ye
 
 
 def rolling_origin_mae(train, first_year=2011):
-    """Mean MAE of one-year-ahead forecasts for each year first_year..last training year, fitted only on earlier months.
-    Uses training years only; far less noisy than a single validation block."""
+    """Mean MAE of one-year-ahead forecasts for each year first_year..last training year, fitted only on earlier months"""
     scores = {n: [] for n in MODELS}
     for year in range(first_year, int(train.index[-1].year) + 1):
         fit, val = train[train.index.year < year], train[train.index.year == year]
@@ -196,7 +181,7 @@ def forecasts(m, artifact_dir=None):
             train, test = s[s.index.year <= TRAIN_END_YEAR], s[s.index.year > TRAIN_END_YEAR]
             val_mae = rolling_origin_mae(train)
             test_scores = {n: metrics(test.values, f(train)(test.index)) for n, f in MODELS.items()}
-            chosen = min(val_mae, key=val_mae.get)        # chosen on validation inside the training years only
+            chosen = min(val_mae, key=val_mae.get)
             final_fn = MODELS[chosen](s)
             future = pd.period_range(s.index[-1] + 1, periods=12, freq="M")
             pred = final_fn(future)
@@ -221,7 +206,7 @@ def forecasts(m, artifact_dir=None):
 
 
 def run(cache_dir, artifact_root):
-    """Train/evaluate everything on the cached verified data. Returns the results document and writes artifacts."""
+    """Train/evaluate everything on the cached verified data. Returns the results document and writes artifacts"""
     d, m = load(cache_dir)
     created = datetime.now(timezone.utc)
     art = Path(artifact_root) / f"{VERSION}_{created:%Y%m%dT%H%M%SZ}"

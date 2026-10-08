@@ -1,9 +1,4 @@
-r"""Build the SRS deliverables as genuine Word documents: submission/EarthScape_Final_Report.docx and submission/ReadMe.docx.
-
-Run: .venv\Scripts\python.exe scripts\build_report.py [--tests N]
-Facts come from the project documents (docs/*.md); the requirement table is read from docs/srs-completion-plan.md.
-The SRS asks for "ReadMe.doc": this script writes .docx (the format available here); see the ReadMe for the Save-As step.
-"""
+"""Build the SRS deliverables as genuine Word documents: submission/EarthScape_Final_Report.docx and submission/ReadMe.docx"""
 import argparse
 import re
 from datetime import date
@@ -25,7 +20,7 @@ OUT = ROOT / "submission"
 
 
 def diagram(path):
-    """Architecture / data-flow figure drawn with matplotlib (no external service)."""
+    """Architecture / data-flow figure drawn with matplotlib (no external service)"""
     fig, ax = plt.subplots(figsize=(11, 6.2))
     ax.set_xlim(0, 22)
     ax.set_ylim(0, 12.4)
@@ -93,7 +88,7 @@ class Doc:
 
     def p(self, text, bold=False, italic=False):
         para = self.d.add_paragraph()
-        for i, part in enumerate(re.split(r"\*\*(.+?)\*\*", text)):   # **bold** inline
+        for i, part in enumerate(re.split(r"\*\*(.+?)\*\*", text)):
             run = para.add_run(part)
             run.bold = bold or i % 2 == 1
             run.italic = italic

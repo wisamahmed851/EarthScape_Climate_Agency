@@ -1,10 +1,10 @@
-"""Build dist/earthscape_submission.zip from the project files, leaving out secrets, environments, data and temporary files."""
+"""Build dist/earthscape_submission.zip from the project files, leaving out secrets, environments, data and temporary files"""
 import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXCLUDE_DIRS = {".venv", "venv", ".git", "data", "artifacts", "logs", "backups", "dist", "__pycache__", ".ipynb_checkpoints", ".pytest_cache", ".idea"}
-EXCLUDE_NAMES = {".env", "Thumbs.db", ".DS_Store", "Wisam.md"}   # Wisam.md is a personal to-do guide, not a deliverable
+EXCLUDE_NAMES = {".env", "Thumbs.db", ".DS_Store", "Wisam.md"}
 EXCLUDE_SUFFIXES = {".pyc", ".log", ".pem", ".key", ".p12", ".jks", ".hdf", ".part", ".mp4", ".zip"}
 
 

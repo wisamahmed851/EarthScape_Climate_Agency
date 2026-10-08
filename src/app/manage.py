@@ -22,12 +22,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from bson import json_util  # noqa: E402
+from bson import json_util
 
-from app import analytics, data, db as dbmod, live, monitor, reference, services  # noqa: E402
-from app.settings import ROOT, Settings  # noqa: E402
+from app import analytics, data, db as dbmod, live, monitor, reference, services
+from app.settings import ROOT, Settings
 
-BACKUP_COLLECTIONS = ["users", "feedback", "alert_rules", "alerts", "ml_runs", "ingest_status", "latest_readings"]   # sessions are not backed up
+BACKUP_COLLECTIONS = ["users", "feedback", "alert_rules", "alerts", "ml_runs", "ingest_status", "latest_readings"]
 
 
 def backup(database, root, with_hdfs):
@@ -41,7 +41,7 @@ def backup(database, root, with_hdfs):
         path.write_text(json_util.dumps(docs, indent=0), encoding="utf-8")
         files[path.name] = {"documents": len(docs)}
     if with_hdfs:
-        for sub in ("_manifest", "processed"):   # copied through `-cat`: the hdfs client runs in WSL and cannot write Windows paths
+        for sub in ("_manifest", "processed"):
             for line in data.hdfs("-ls", "-R", f"{data.HDFS_ROOT}/{sub}", timeout=300).decode().splitlines():
                 if line.startswith("-"):
                     remote = line.split(None, 7)[7]
@@ -56,7 +56,7 @@ def backup(database, root, with_hdfs):
 
 
 def prune_backups(root, keep):
-    """Delete the oldest backup folders (named earthscape_<UTC stamp> and holding a BACKUP.json) beyond the newest `keep`."""
+    """Delete the oldest backup folders (named earthscape_<UTC stamp> and holding a BACKUP.json) beyond the newest `keep`"""
     folders = sorted(p for p in Path(root).glob("earthscape_*") if monitor.BACKUP_DIR.match(p.name) and (p / "BACKUP.json").exists())
     removed = folders[:-keep] if keep >= 1 else []
     for p in removed:
@@ -67,7 +67,7 @@ def prune_backups(root, keep):
 def restore(database, path, replace):
     path = Path(path)
     meta = json.loads((path / "BACKUP.json").read_text(encoding="utf-8"))
-    for name, info in meta["files"].items():   # integrity first: nothing is written if a checksum is wrong
+    for name, info in meta["files"].items():
         if "sha256" in info and hashlib.sha256((path / name).read_bytes()).hexdigest() != info["sha256"]:
             sys.exit(f"Backup file {name} does not match its recorded checksum; nothing restored.")
     for name in BACKUP_COLLECTIONS:

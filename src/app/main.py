@@ -28,6 +28,14 @@ log = logging.getLogger("earthscape")
 MAX_DAILY_DAYS = 1830
 POWER_LABEL = ("NASA POWER: gridded reanalysis (MERRA-2) plus satellite-derived radiation (CERES), derived aggregates. "
                "Not physical weather-station observations.")
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "same-origin",
+    "Content-Security-Policy": ("default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; "
+                                "style-src 'self' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; "
+                                "img-src 'self' data:; frame-ancestors 'none'"),
+}
 SOURCES = [
     {"id": "power", "name": "NASA POWER hourly (2001-2025)", "klass": "Gridded reanalysis + satellite-derived radiation", "status": "Implemented",
      "detail": "RAW, INTERIM, daily/monthly/yearly PROCESSED layers in HDFS (MapReduce)"},
@@ -40,7 +48,7 @@ SOURCES = [
     {"id": "modis", "name": "MODIS MOD11A2 v061 land surface temperature", "klass": "Satellite-derived", "status": "Not ingested",
      "detail": "downloader and HDF4 reader are built; no data because NASA Earthdata credentials are not configured"},
 ]
-NAV = [  # (group label, [(key, label, href, role or None)])
+NAV = [
     ("Climate", [("overview", "Overview", "/overview", None), ("history", "Historical Climate", "/history", None),
                  ("compare", "City Comparison", "/compare", None), ("trends", "Trends & Extremes", "/trends", None),
                  ("correlation", "Correlation", "/correlation", None), ("forecast", "Forecast", "/forecast", None)]),
@@ -52,9 +60,15 @@ NAV = [  # (group label, [(key, label, href, role or None)])
 ]
 
 
+def average(values):
+    """Mean of the values that are present, rounded to 2 decimals; None when all are missing"""
+    present = [v for v in values if v is not None]
+    return round(sum(present) / len(present), 2) if present else None
+
+
 def create_app(settings=None, db=None, store=None):
     settings = settings or Settings.from_env()
-    if settings.log_file:   # rotating file log; messages carry error types and paths only, never credentials or request bodies
+    if settings.log_file:
         settings.log_file.parent.mkdir(parents=True, exist_ok=True)
         handler = logging.handlers.RotatingFileHandler(settings.log_file, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
         handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
@@ -86,14 +100,10 @@ def create_app(settings=None, db=None, store=None):
     @app.middleware("http")
     async def headers(request: Request, call_next):
         resp = await call_next(request)
-        resp.headers.update({
-            "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "same-origin",
-            "Cache-Control": "no-store" if not request.url.path.startswith("/static") else "public, max-age=300",
-            "Content-Security-Policy": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; "
-                                       "style-src 'self' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; frame-ancestors 'none'"})
+        cache = "public, max-age=300" if request.url.path.startswith("/static") else "no-store"
+        resp.headers.update({**SECURITY_HEADERS, "Cache-Control": cache})
         return resp
 
-    # ---------- errors ----------
     def wants_json(request):
         return request.url.path.startswith("/api/") or request.url.path == "/health"
 
@@ -103,7 +113,7 @@ def create_app(settings=None, db=None, store=None):
         ctx = load_ctx(request) if status != 503 else SimpleNamespace(user=None, session=None)
         return page(request, ctx, "error.html", {"status": status, "message": message}, status=status)
 
-    @app.exception_handler(StarletteHTTPException)   # also catches the router's own 404/405
+    @app.exception_handler(StarletteHTTPException)
     async def http_error(request, exc):
         if exc.status_code == 401 and not wants_json(request):
             return RedirectResponse("/login", status_code=303)
@@ -124,7 +134,6 @@ def create_app(settings=None, db=None, store=None):
         log.error("Unhandled error on %s: %s", request.url.path, type(exc).__name__)
         return error_response(request, 500, "Something went wrong.")
 
-    # ---------- session / auth helpers ----------
     def load_ctx(request):
         token = request.cookies.get(COOKIE)
         try:
@@ -195,7 +204,6 @@ def create_app(settings=None, db=None, store=None):
             raise ValidationError("Unknown city.")
         return city
 
-    # ---------- auth ----------
     @app.get("/")
     def root(request: Request):
         return go("/overview")
@@ -221,7 +229,7 @@ def create_app(settings=None, db=None, store=None):
         user = services.authenticate(app.state.db, username[:64], password[:256])
         if not user:
             return page(request, ctx, "login.html", {"error": "Invalid username or password."}, status=401)
-        services.delete_session(app.state.db, ctx.token)   # new session id at login (no fixation)
+        services.delete_session(app.state.db, ctx.token)
         token = services.create_session(app.state.db, user["_id"], settings.session_hours)
         resp = go("/overview")
         resp.set_cookie(COOKIE, token, httponly=True, samesite="lax", secure=settings.cookie_secure,
@@ -236,7 +244,6 @@ def create_app(settings=None, db=None, store=None):
         resp.delete_cookie(COOKIE)
         return resp
 
-    # ---------- dashboard pages ----------
     @app.get("/overview")
     def overview(request: Request, city: str = "", ctx=Depends(need_user)):
         store = app.state.store
@@ -282,10 +289,8 @@ def create_app(settings=None, db=None, store=None):
         if not 2001 <= start_year <= end_year <= 2025:
             raise HTTPException(400, "Years must satisfy 2001 <= start <= end <= 2025.")
         series = store.compare(start_year, end_year)
-        mean = lambda xs: round(sum(v for v in xs if v is not None) / len([v for v in xs if v is not None]), 2) \
-            if any(v is not None for v in xs) else None
-        rows = [{"name": data.CITY_NAMES[c], "temp": mean(s["temperature_c"]), "hum": mean(s["humidity_pct"]),
-                 "wind": mean(s["wind_m_s"]), "rain": mean(s["precipitation_mm"])} for c, s in series.items()]
+        rows = [{"name": data.CITY_NAMES[c], "temp": average(s["temperature_c"]), "hum": average(s["humidity_pct"]),
+                 "wind": average(s["wind_m_s"]), "rain": average(s["precipitation_mm"])} for c, s in series.items()]
         return page(request, ctx, "compare.html", {"ready": True, "start_year": start_year, "end_year": end_year, "rows": rows})
 
     @app.get("/sources")
@@ -293,7 +298,6 @@ def create_app(settings=None, db=None, store=None):
         store = app.state.store
         return page(request, ctx, "sources.html", {"sources": SOURCES, "meta": store.meta, "data_error": store.error})
 
-    # ---------- JSON API (read-only, authenticated) ----------
     def api_guard(fn):
         @functools.wraps(fn)
         def wrapper(*a, **k):
@@ -352,14 +356,14 @@ def create_app(settings=None, db=None, store=None):
             flash(ctx, "danger", f"Refresh failed; the previous cache is unchanged. ({e})")
         return go("/sources")
 
-    # ---------- alerts (configuration only) ----------
     @app.get("/alerts")
     def alerts(request: Request, edit: str = "", ctx=Depends(need_user)):
         rules = services.list_rules(app.state.db)
         editing = next((r for r in rules if str(r["_id"]) == edit), None)
-        return page(request, ctx, "alerts.html", {"rules": rules, "editing": editing, "variables": services.ALERT_VARIABLES,
-                                                  "operators": services.OPERATORS, "severities": services.SEVERITIES, "live_vars": services.LIVE_VARIABLES,
-                                                  "cities": app.state.store.cities() or list(data.CITY_NAMES), "names": data.CITY_NAMES})
+        context = {"rules": rules, "editing": editing, "variables": services.ALERT_VARIABLES,
+                   "operators": services.OPERATORS, "severities": services.SEVERITIES, "live_vars": services.LIVE_VARIABLES,
+                   "cities": app.state.store.cities() or list(data.CITY_NAMES), "names": data.CITY_NAMES}
+        return page(request, ctx, "alerts.html", context)
 
     def rule_form(name, city_id, variable, operator, threshold, severity):
         return {"name": name, "city_id": city_id, "variable": variable, "operator": operator, "threshold": threshold, "severity": severity}
@@ -399,7 +403,6 @@ def create_app(settings=None, db=None, store=None):
             flash(ctx, "danger", str(e))
         return go("/alerts")
 
-    # ---------- feedback ----------
     @app.get("/feedback")
     def feedback_form(request: Request, ctx=Depends(need_user)):
         return page(request, ctx, "feedback.html", {"categories": services.FEEDBACK_CATEGORIES})
@@ -429,7 +432,6 @@ def create_app(settings=None, db=None, store=None):
             flash(ctx, "danger", str(e))
         return go("/admin/feedback")
 
-    # ---------- user management (Administrator only) ----------
     @app.get("/admin/users")
     def users(request: Request, ctx=Depends(need_admin)):
         return page(request, ctx, "users.html", {"users": services.list_users(app.state.db), "roles": services.ROLES})
@@ -462,7 +464,6 @@ def create_app(settings=None, db=None, store=None):
         return user_action(ctx, csrf_token, lambda: services.reset_password(app.state.db, user_id, password),
                            "Password reset; the user's sessions were ended.")
 
-    # ---------- current data ----------
     def jsonable(doc):
         if isinstance(doc, dict):
             return {k: jsonable(v) for k, v in doc.items() if k != "_id"}
@@ -533,7 +534,7 @@ def create_app(settings=None, db=None, store=None):
             def work():
                 try:
                     live.poll_cycle(app.state.db)
-                except Exception as e:   # background work must not take the app down
+                except Exception as e:
                     log.error("manual poll failed: %s", type(e).__name__)
                 finally:
                     app.state.poll_lock.release()
@@ -543,7 +544,6 @@ def create_app(settings=None, db=None, store=None):
             flash(ctx, "warning", "A poll is already running.")
         return go("/current")
 
-    # ---------- alert history ----------
     @app.get("/alerts/history")
     def alert_history(request: Request, status: str = "", ctx=Depends(need_user)):
         return page(request, ctx, "alert_history.html", {"alerts": services.list_alerts(app.state.db, status), "status": status,
@@ -561,7 +561,6 @@ def create_app(settings=None, db=None, store=None):
             flash(ctx, "danger", str(e))
         return go("/alerts/history")
 
-    # ---------- analytics (trained on the verified POWER data) ----------
     def ml_context(city):
         run = analytics.latest(app.state.db)
         cities = list(data.CITY_NAMES)
@@ -575,7 +574,7 @@ def create_app(settings=None, db=None, store=None):
         payload = None
         if run:
             t = run["trend"][city]
-            for v in t.values():   # Theil-Sen line for the chart
+            for v in t.values():
                 med = statistics.median(y - v["slope_per_decade"] / 10 * x for x, y in zip(v["years"], v["values"]))
                 v["fit"] = [round(med + v["slope_per_decade"] / 10 * x, 3) for x in v["years"]]
             payload = {"trend": t, "anomalies": run["anomalies"][city], "extremes": (app.state.store.extremes() or {}).get(city)}
@@ -617,10 +616,9 @@ def create_app(settings=None, db=None, store=None):
                 flash(ctx, "danger", "Training failed; see the server log.")
         return go("/trends")
 
-    # ---------- health ----------
     @app.get("/health")
     def health():
-        """App health is always 'ok' while this answers; dependencies are reported separately."""
+        """App health is always 'ok' while this answers; dependencies are reported separately"""
         out = {"app": "ok"}
         try:
             app.state.db.command("ping")

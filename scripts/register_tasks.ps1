@@ -1,5 +1,4 @@
-# Registers the two EarthScape scheduled tasks for the current user (no elevation needed). Run from anywhere:
-#   powershell -ExecutionPolicy Bypass -File scripts\register_tasks.ps1
+# Register the EarthScape health-check and backup scheduled tasks for the current user
 $root = Split-Path -Parent $PSScriptRoot
 $py = Join-Path $root '.venv\Scripts\pythonw.exe'
 $manage = Join-Path $root 'src\app\manage.py'

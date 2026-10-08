@@ -1,9 +1,4 @@
-"""NASA POWER historical batch: every approved city x year through nasa_power.ingest, then an HDFS check.
-
-Sequential and resumable: nasa_power.ingest skips city-years the manifest already records as ok.
-
-Run: python src/ingestion/nasa_power_batch.py [--start-year 2001] [--end-year 2025] [--delay 1.0]
-"""
+"""NASA POWER historical batch: every approved city x year through nasa_power.ingest, then an HDFS check"""
 import argparse
 import hashlib
 import json
@@ -15,7 +10,7 @@ from datetime import date, datetime, timezone
 
 import nasa_power as np_
 
-MAX_CONSECUTIVE_FAILURES = 5  # more than this in a row suggests a systemic problem (HDFS down, no network)
+MAX_CONSECUTIVE_FAILURES = 5
 
 
 def work_units(cities, first_year, last_year):
@@ -27,7 +22,7 @@ def expected_rows(year):
 
 
 def run_batch(units, ingest_one, delay=1.0, sleep=time.sleep):
-    """ingest_one(city, year) -> result dict. Failures are collected; the batch continues."""
+    """ingest_one(city, year) -> result dict. Failures are collected; the batch continues"""
     results, consecutive = [], 0
     for city, year in units:
         try:
@@ -72,7 +67,7 @@ def hdfs_bytes(path):
 
 
 def verify(units, cities, variables):
-    """Check HDFS directly: every object present, manifest ok and consistent, sha256/size/rows re-derived."""
+    """Check HDFS directly: every object present, manifest ok and consistent, sha256/size/rows re-derived"""
     manifest = np_.read_manifest()
     listed = {l.split()[-1] for l in np_.hdfs_ok("-ls", "-R", f"{np_.HDFS_ROOT}/raw/{np_.SOURCE}").decode().splitlines()
               if l.startswith("-")}

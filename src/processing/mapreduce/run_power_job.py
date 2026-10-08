@@ -1,13 +1,4 @@
-"""Run a POWER MapReduce job (Hadoop Streaming on YARN), verify it independently, publish it, write provenance.
-
-  daily   : INTERIM hourly CSVs  -> /earthscape/processed/power_daily/    (45,655 rows)
-  monthly : processed daily CSV  -> /earthscape/processed/power_monthly/  (1,500 rows)
-  yearly  : processed daily CSV  -> /earthscape/processed/power_yearly/   (125 rows: annual means and extreme-event counts)
-
-Inputs are only read. Output goes to /earthscape/_tmp/<job>_<time>, is verified, then renamed into place; an
-existing output is never overwritten (an ok manifest record for the same inputs and scripts means skip).
-Run: python src/processing/mapreduce/run_power_job.py daily   (needs HDFS + YARN, see docs/environment.md)
-"""
+"""Run a POWER MapReduce job (Hadoop Streaming on YARN), verify it independently, publish it, write provenance"""
 import argparse
 import calendar
 import hashlib
@@ -23,10 +14,10 @@ ROOT = Path(__file__).resolve().parents[3]
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src" / "ingestion"))
 sys.path.insert(0, str(HERE))
-import nasa_power as raw  # noqa: E402
-import power_daily_reducer as daily_r  # noqa: E402
-import power_monthly_reducer as monthly_r  # noqa: E402
-import power_yearly_reducer as yearly_r  # noqa: E402
+import nasa_power as raw
+import power_daily_reducer as daily_r
+import power_monthly_reducer as monthly_r
+import power_yearly_reducer as yearly_r
 
 STREAMING_JAR = "/opt/hadoop/share/hadoop/tools/lib/hadoop-streaming-3.4.3.jar"
 H = raw.HDFS_ROOT
@@ -72,7 +63,7 @@ def append(manifest, record):
 
 
 def read_interim():
-    """Verify the five INTERIM files against the INTERIM manifest. Returns (inputs, {city: data lines})."""
+    """Verify the five INTERIM files against the INTERIM manifest. Returns (inputs, {city: data lines})"""
     manifest = hdfs_text(f"{H}/_manifest/power_hourly_interim.jsonl")
     inputs, texts = [], {}
     for city in CITIES:
@@ -97,7 +88,7 @@ def read_daily_input():
 
 
 def parse_log(log):
-    """Job id, YARN application id and all counters from the Hadoop client log."""
+    """Job id, YARN application id and all counters from the Hadoop client log"""
     job = re.search(r"Running job: (job_\d+_\d+)", log)
     if not job:
         raise raw.IngestError("no job id in the Hadoop log")
@@ -117,7 +108,6 @@ def parse_log(log):
 
 
 def run_yarn(job, name, input_arg, out_dir):
-    # The repo path contains spaces, which Hadoop's -files URI parsing rejects, so ship copies from a clean dir.
     mapper, reducer = JOBS[job]["scripts"]
     return bash(f"""set -e
 source '{wsl_path(ROOT)}/config/earthscape-env.sh'
@@ -138,13 +128,13 @@ def yarn_state(app):
 
 
 def r4(x):
-    """Exact half-up (away from zero) rounding of a Fraction to 4 decimals, as text; independent of the reducer's Decimal code."""
+    """Exact half-up (away from zero) rounding of a Fraction to 4 decimals, as text; independent of the reducer's Decimal code"""
     q = (abs(x) * 10000 + Fraction(1, 2)).__floor__()
     return ("-" if x < 0 and q else "") + f"{q // 10000}.{q % 10000:04d}"
 
 
 def group_hourly(texts, key_len):
-    """{(city, timestamp[:key_len]): [rows]} from INTERIM lines."""
+    """{(city, timestamp[:key_len]): [rows]} from INTERIM lines"""
     groups = {}
     for city, lines in texts.items():
         for line in lines:
@@ -159,7 +149,7 @@ def hourly_columns(rows):
 
 
 def verify_daily(output, texts):
-    """Compare every daily row with a recomputation from INTERIM. Returns a summary or raises."""
+    """Compare every daily row with a recomputation from INTERIM. Returns a summary or raises"""
     lines = output.split("\n")
     if lines.pop() != "" or lines[0] != daily_r.HEADER:
         raise raw.IngestError("daily output header/terminator wrong")
@@ -185,7 +175,7 @@ def verify_daily(output, texts):
 
 
 def verify_monthly(output, texts):
-    """Recompute each month from the HOURLY INTERIM rows; means may differ by at most 0.0001 (rounded daily means)."""
+    """Recompute each month from the HOURLY INTERIM rows; means may differ by at most 0.0001 (rounded daily means)"""
     lines = output.split("\n")
     if lines.pop() != "" or lines[0] != monthly_r.HEADER:
         raise raw.IngestError("monthly output header/terminator wrong")
@@ -213,7 +203,7 @@ def verify_monthly(output, texts):
 
 
 def verify_yearly(output, texts):
-    """Recompute every city-year from the HOURLY INTERIM rows (daily extremes and precipitation totals built from hours)."""
+    """Recompute every city-year from the HOURLY INTERIM rows (daily extremes and precipitation totals built from hours)"""
     lines = output.split("\n")
     if lines.pop() != "" or lines[0] != yearly_r.HEADER:
         raise raw.IngestError("yearly output header/terminator wrong")

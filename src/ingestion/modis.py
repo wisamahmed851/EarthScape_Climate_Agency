@@ -1,14 +1,4 @@
-"""MODIS MOD11A2 v061 (8-day 1 km land surface temperature) - search, download, HDF4 reading.
-
-  python src/ingestion/modis.py plan                         keyless CMR search: granule counts and sizes per tile (no download)
-  python src/ingestion/modis.py check                        prerequisites: credentials present (not shown), pyhdf, HDFS, free disk
-  python src/ingestion/modis.py pilot --tile h24v05 --year 2015 --count 2
-                                                             download + validate + upload a few granules (needs Earthdata credentials)
-
-Credentials come only from environment variables / the git-ignored .env: EARTHDATA_TOKEN (bearer) or
-EARTHDATA_USERNAME + EARTHDATA_PASSWORD. They are sent only to *.earthdata.nasa.gov hosts, never printed or stored.
-Nothing is downloaded without credentials, and the satellite values are never invented.
-"""
+"""MODIS MOD11A2 v061 (8-day 1 km land surface temperature) - search, download, HDF4 reading"""
 import argparse
 import base64
 import hashlib
@@ -40,9 +30,8 @@ class ModisError(Exception):
     pass
 
 
-# ---------- geometry (sinusoidal grid) ----------
 def tile_pixel(lat, lon):
-    """MODIS sinusoidal tile (h, v) and the row/col of the 1 km pixel containing a point."""
+    """MODIS sinusoidal tile (h, v) and the row/col of the 1 km pixel containing a point"""
     x = R * math.radians(lon) * math.cos(math.radians(lat))
     y = R * math.radians(lat)
     gx, gy = (x - X0) / PIX, (Y0 - y) / PIX
@@ -50,9 +39,8 @@ def tile_pixel(lat, lon):
     return h, v, int(gy - v * 1200), int(gx - h * 1200)
 
 
-# ---------- CMR search (keyless) ----------
 def search(tile, start, end):
-    """All MOD11A2 v061 granules of one tile between two ISO dates: [{name, url, size_mb, time_start}]."""
+    """All MOD11A2 v061 granules of one tile between two ISO dates: [{name, url, size_mb, time_start}]"""
     out, page = [], 1
     while True:
         query = urllib.parse.urlencode({
@@ -76,7 +64,6 @@ def plan(start="2015-01-01", end="2025-12-31"):
                 "last": g[-1]["time_start"] if g else None} for t, g in rows.items()}
 
 
-# ---------- authenticated download ----------
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *a, **k):
         return None
@@ -93,7 +80,7 @@ def credentials():
 
 
 def download(url, dest, auth, max_hops=10):
-    """Follow Earthdata redirects by hand so the Authorization header only goes to *.earthdata.nasa.gov hosts."""
+    """Follow Earthdata redirects by hand so the Authorization header only goes to *.earthdata.nasa.gov hosts"""
     opener = urllib.request.build_opener(_NoRedirect, urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
     for _ in range(max_hops):
         host = urllib.parse.urlparse(url).hostname or ""
@@ -122,9 +109,8 @@ def validate_hdf(path, size_mb_hint=None):
     return size
 
 
-# ---------- HDF4 reading ----------
 def check_geolocation(sd, h, v):
-    """The HDF-EOS StructMetadata upper-left corner must equal the standard sinusoidal corner of tile (h, v)."""
+    """The HDF-EOS StructMetadata upper-left corner must equal the standard sinusoidal corner of tile (h, v)"""
     text = sd.attributes().get("StructMetadata.0", "")
     m = re.search(r"UpperLeftPointMtrs=\(\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*\)", text)
     if not m:
@@ -135,13 +121,8 @@ def check_geolocation(sd, h, v):
 
 
 def read_lst(path, lat, lon, half=1):
-    """Day/night LST (K) and QC for the (2*half+1)^2 pixel window around a point.
-
-    Scale factor and fill value come from the file's own SDS attributes. A pixel counts only if LST is not the fill value
-    and the mandatory QC flag (bits 0-1) says LST was produced (0 good, 1 other quality; 2 cloud and 3 other = not produced).
-    Nothing is gap-filled; a window without valid pixels gives None.
-    """
-    from pyhdf.SD import SD, SDC   # imported here: only needed when real HDF4 files exist
+    """Day/night LST (K) and QC for the (2*half+1)^2 pixel window around a point"""
+    from pyhdf.SD import SD, SDC
     h, v, row, col = tile_pixel(lat, lon)
     sd = SD(str(path), SDC.READ)
     try:
@@ -167,14 +148,14 @@ def read_lst(path, lat, lon, half=1):
 
 
 def prerequisites(hdfs_tools):
-    """Report (without printing any secret) whether the pilot can run."""
+    """Report (without printing any secret) whether the pilot can run"""
     try:
         credentials()
         creds = True
     except ModisError:
         creds = False
     try:
-        import pyhdf.SD  # noqa: F401
+        import pyhdf.SD
         pyhdf_ok = True
     except ImportError:
         pyhdf_ok = False

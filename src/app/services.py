@@ -1,4 +1,4 @@
-"""MongoDB operations for users, sessions, feedback and alert rules, with input validation."""
+"""MongoDB operations for users, sessions, feedback and alert rules, with input validation"""
 import math
 import re
 from datetime import datetime, timedelta, timezone
@@ -12,7 +12,6 @@ USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]{2,31}$")
 MAX_FAILED, LOCK_MINUTES = 5, 15
 FEEDBACK_CATEGORIES = ("feedback", "support", "bug")
 FEEDBACK_STATUSES = ("new", "reviewed")
-# Daily variables a rule can target; names match the PROCESSED daily schema (evaluation is not implemented yet).
 ALERT_VARIABLES = {
     "temperature_2m_max_c": "Daily maximum temperature (C)",
     "temperature_2m_min_c": "Daily minimum temperature (C)",
@@ -22,7 +21,6 @@ ALERT_VARIABLES = {
     "wind_speed_2m_mean_m_s": "Daily mean wind speed at 2 m (m/s)",
     "surface_pressure_mean_kpa": "Daily mean surface pressure (kPa)",
 }
-# Live variables, evaluated against incoming readings: key -> (source, field, unit). Wording always states modelled/observed.
 LIVE_VARIABLES = {
     "openmeteo_weather_model:temperature_2m": ("openmeteo_weather_model", "temperature_2m", "C"),
     "openmeteo_weather_model:relative_humidity_2m": ("openmeteo_weather_model", "relative_humidity_2m", "%"),
@@ -78,7 +76,6 @@ def clean_text(value, label, min_len, max_len):
     return value
 
 
-# ---------- users ----------
 def validate_username(username):
     username = (username or "").strip().lower()
     if not USERNAME_RE.match(username):
@@ -109,7 +106,7 @@ def create_user(db, username, password, role):
 
 
 def authenticate(db, username, password):
-    """Return the user document, or None. Failures are indistinguishable to the caller."""
+    """Return the user document, or None. Failures are indistinguishable to the caller"""
     username = (username or "").strip().lower()
     user = db.users.find_one({"username": username}) if USERNAME_RE.match(username) else None
     if not user:
@@ -168,7 +165,6 @@ def reset_password(db, user_id, password):
     db.sessions.delete_many({"user_id": user["_id"]})
 
 
-# ---------- sessions (server-side; the cookie holds only a random token, the DB stores its hash) ----------
 def create_session(db, user_id, hours, minutes=None):
     token = security.new_token()
     ttl = timedelta(minutes=minutes) if minutes else timedelta(hours=hours)
@@ -191,7 +187,6 @@ def delete_session(db, token):
         db.sessions.delete_one({"_id": security.token_hash(token)})
 
 
-# ---------- feedback ----------
 def add_feedback(db, user, category, subject, message):
     if category not in FEEDBACK_CATEGORIES:
         raise ValidationError("Unknown category.")
@@ -213,7 +208,6 @@ def set_feedback_status(db, feedback_id, status):
         raise ValidationError("Feedback not found.")
 
 
-# ---------- alert rules (configuration only; nothing evaluates them yet) ----------
 def validate_rule(form, cities):
     try:
         threshold = float(str(form.get("threshold", "")).strip())
@@ -264,7 +258,6 @@ def list_rules(db):
     return list(db.alert_rules.find().sort("name", 1))
 
 
-# ---------- alert history ----------
 def list_alerts(db, status=None, limit=200):
     query = {"status": status} if status in ALERT_STATUSES else {}
     return list(db.alerts.find(query).sort("evaluated_at", -1).limit(limit))
